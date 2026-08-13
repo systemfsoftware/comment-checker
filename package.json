@@ -1,0 +1,32 @@
+{
+  "name": "comment-checker",
+  "private": true,
+  "packageManager": "pnpm@11.21.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "lint": "oxlint -c .oxlintrc.json --no-error-on-unmatched-pattern",
+    "format": "./bin/dprint fmt",
+    "format:check": "./bin/dprint check",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,js,mjs,cjs}": [
+      "oxlint -c .oxlintrc.json --fix --no-error-on-unmatched-pattern",
+      "./bin/dprint fmt"
+    ],
+    "*.{json,jsonc,md,toml}": [
+      "./bin/dprint fmt"
+    ]
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.1",
+    "@commitlint/config-conventional": "^21.2.0",
+    "@commitlint/types": "^21.2.0",
+    "@dprint/linux-x64-glibc": "^0.55.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
+    "oxlint": "^1.78.0"
+  }
+}

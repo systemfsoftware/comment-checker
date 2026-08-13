@@ -10,7 +10,7 @@ network, no dynamic loading). A from-scratch, constitution-aligned rewrite of
 
 ## The problem it solves
 
-A checker that flags *every* comment trains the AI to dismiss the warning
+A checker that flags _every_ comment trains the AI to dismiss the warning
 ("this one's justified") — even when it isn't. This checker classifies each
 comment and only flags the unnecessary ones, with a **specific reason** the
 dismissal can't hand-wave:
@@ -63,9 +63,9 @@ Add to `~/.claude/settings.json` (or `.claude/settings.json` in your project):
 
 ## Exit codes
 
-| code | meaning |
-|------|---------|
-| 0    | pass — no unnecessary comments |
+| code | meaning                               |
+| ---- | ------------------------------------- |
+| 0    | pass — no unnecessary comments        |
 | 2    | block — unnecessary comments detected |
 
 ## Custom prompt
@@ -95,7 +95,7 @@ The classifier is a pure, branch-free fold over ordered rule tables (CONST-P1,
 CONST-P2) and is gated at a 100% mutation score on the core (CONST-T3). Two
 CONST-G1 judgment calls are declared, not hidden: the hook boundary fails open
 to a single `None`/empty result rather than tagged error variants (CONST-D2),
-because no caller branches on *why* detection failed — every failure path is
+because no caller branches on _why_ detection failed — every failure path is
 the same deliberate "skip, never block the user"; and `line_number` is an
 unbranded `usize` (CONST-D3) because it is only ever read for display, so the
 transposition harm the rule exists to prevent cannot occur here.

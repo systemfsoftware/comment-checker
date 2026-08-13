@@ -1,0 +1,24 @@
+packages:
+  - "npm/packages/*"
+  - "npm/apps/*"
+
+catalog:
+  effect: "4.0.0-rc.108"
+  typescript: "^7.0.2"
+
+# Branch lockfiles: installs on non-default branches write pnpm-lock.<branch>.yaml
+# and never mutate pnpm-lock.yaml; push to master reconciles them (see CI merge step).
+gitBranchLockfile: true
+mergeGitBranchLockfilesBranchPattern: [ "master" ]
+catalogMode: strict
+
+# pnpm 11 re-runs a deps-status check before every pnpm run. Under the default
+# `install` value the check spawns a nested pnpm install (pnpm/pnpm#11586); `warn`
+# keeps the staleness signal and runs nothing.
+verifyDepsBeforeRun: warn
+
+# Explicit so minimumReleaseAgeStrict defaults to true — a blocked install is a
+# finding to escalate, never a gate to weaken.
+minimumReleaseAge: 1440
+
+trustPolicy: no-downgrade

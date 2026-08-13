@@ -1,0 +1,27 @@
+{
+  "typescript": {
+    "lineWidth": 100,
+    "quoteStyle": "alwaysDouble",
+    "semiColons": "always",
+    "useBraces": "maintain",
+  },
+  "json": {
+    "lineWidth": 100,
+  },
+  "markdown": {
+    "lineWidth": 80,
+  },
+  "toml": {},
+  "includes": ["**/*.{ts,js,mjs,cjs,json,jsonc,md,toml}"],
+  "excludes": [
+    "**/node_modules",
+    "**/*-lock.json",
+    "repos/**",
+  ],
+  "plugins": [
+    "https://plugins.dprint.dev/typescript-0.93.0.wasm",
+    "https://plugins.dprint.dev/json-0.19.4.wasm",
+    "https://plugins.dprint.dev/markdown-0.17.8.wasm",
+    "https://plugins.dprint.dev/toml-0.6.3.wasm",
+  ],
+}

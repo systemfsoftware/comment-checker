@@ -1,0 +1,26 @@
+name: install-deps
+description: Install pnpm dependencies with branch lockfile reconciliation
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 24
+    - name: Enable corepack
+      shell: bash
+      run: corepack enable
+
+    # On push to master, merge any pending branch lockfiles into
+    # pnpm-lock.yaml. Runs only on master (not PRs or branch pushes)
+    # and is a no-op when no branch lockfiles exist. The result is
+    # intentionally NOT committed — the next master push re-runs the
+    # merge with an identical result, and committing here would loop CI.
+    - name: Merge branch lockfiles (master only)
+      if: github.ref_name == 'master'
+      shell: bash
+      run: corepack pnpm install --merge-git-branch-lockfiles
+
+    - name: Install dependencies
+      shell: bash
+      run: corepack pnpm install --frozen-lockfile
