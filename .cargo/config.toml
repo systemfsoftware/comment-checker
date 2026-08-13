@@ -1,0 +1,6 @@
+# Statically compile exactly the grammars this tool supports, at one
+# tree-sitter version. No runtime download, no dynamic loading — the binary
+# is self-contained and works offline (and inside a bubblewrap sandbox).
+[env]
+TSLP_LANGUAGES = "python,javascript,typescript,tsx,go,rust,c,cpp,java,kotlin,scala,ruby,php,swift,csharp,elixir,bash,lua,sql,json,yaml,toml,html,css,dockerfile,hcl,markdown,r,dart,zig,haskell,ocaml,svelte,elm,groovy,cue,proto"
+TSLP_LINK_MODE = "static"

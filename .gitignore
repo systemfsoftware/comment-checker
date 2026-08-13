@@ -1,0 +1,8 @@
+/target
+node_modules
+*.log
+mutants.out*
+npm/bin
+.DS_Store
+dist
+*.tsbuildinfo
