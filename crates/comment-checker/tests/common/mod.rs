@@ -208,7 +208,7 @@ pub fn verdict_kind(verdict: &Verdict) -> &'static str {
             UnnecessaryKind::AgentMemo => "AgentMemo",
             UnnecessaryKind::CommentedOutCode => "CommentedOutCode",
             UnnecessaryKind::VacuousTodo => "VacuousTodo",
-            UnnecessaryKind::RestatesCode => "RestatesCode",
+            UnnecessaryKind::RestatesCode { .. } => "RestatesCode",
         },
     }
 }

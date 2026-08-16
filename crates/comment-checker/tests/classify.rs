@@ -7,7 +7,10 @@
 //!   category, in both directions, so a rule change or removal fails a test.
 
 use claude_code_comment_checker::classify::classify;
-use claude_code_comment_checker::{Comment, CommentType, Justification, UnnecessaryKind, Verdict};
+use claude_code_comment_checker::{
+    Comment, CommentContext, CommentType, Justification, PositionRole, RestateEvidence, Scope,
+    UnnecessaryKind, Verdict,
+};
 use proptest::prelude::*;
 use proptest::strategy::Strategy;
 
@@ -90,7 +93,9 @@ fn plain_comment_is_unnecessary() {
     assert_eq!(
         classify(&line("// adds one to one")),
         Verdict::Unnecessary {
-            reason: UnnecessaryKind::RestatesCode
+            reason: UnnecessaryKind::RestatesCode {
+                evidence: RestateEvidence::default()
+            }
         }
     );
 }
@@ -114,7 +119,9 @@ fn docstring_without_markup_is_unnecessary() {
     assert_eq!(
         classify(&docstring("\"\"\"Fetch the user.\"\"\"")),
         Verdict::Unnecessary {
-            reason: UnnecessaryKind::RestatesCode
+            reason: UnnecessaryKind::RestatesCode {
+                evidence: RestateEvidence::default()
+            }
         }
     );
 }
@@ -259,7 +266,7 @@ fn docstring_head_without_markup_is_not_a_public_contract() {
     // line above a declaration a restatement, not documentation.
     use claude_code_comment_checker::classify::classify;
     use claude_code_comment_checker::{
-        CommentContext, CommentType, PositionRole, Scope, UnnecessaryKind, Verdict,
+        CommentContext, CommentType, PositionRole, RestateEvidence, Scope, UnnecessaryKind, Verdict,
     };
     let mut comment = Comment::new("Adds two numbers", 1, CommentType::Docstring);
     comment.context = Some(CommentContext {
@@ -272,7 +279,9 @@ fn docstring_head_without_markup_is_not_a_public_contract() {
     assert_eq!(
         classify(&comment),
         Verdict::Unnecessary {
-            reason: UnnecessaryKind::RestatesCode,
+            reason: UnnecessaryKind::RestatesCode {
+                evidence: RestateEvidence::default()
+            },
         }
     );
 }
@@ -633,7 +642,7 @@ fn unreliable_context_downgrades_fallback_restate_to_justified() {
 fn reliable_context_keeps_fallback_restate_as_unnecessary() {
     use claude_code_comment_checker::classify::classify;
     use claude_code_comment_checker::{
-        CommentContext, CommentType, PositionRole, Scope, UnnecessaryKind, Verdict,
+        CommentContext, CommentType, PositionRole, RestateEvidence, Scope, UnnecessaryKind, Verdict,
     };
     let mut comment = Comment::new("Adds two numbers", 1, CommentType::Line);
     comment.context = Some(CommentContext {
@@ -646,7 +655,167 @@ fn reliable_context_keeps_fallback_restate_as_unnecessary() {
     assert_eq!(
         classify(&comment),
         Verdict::Unnecessary {
-            reason: UnnecessaryKind::RestatesCode,
+            reason: UnnecessaryKind::RestatesCode {
+                evidence: RestateEvidence::default()
+            },
+        }
+    );
+}
+
+// U3 — the context-aware restatement detector, with cited evidence.
+
+fn context_comment(text: &str, adjacent: &str) -> Comment {
+    let mut comment = Comment::new(text, 1, CommentType::Line);
+    comment.context = Some(CommentContext {
+        adjacent_code: Some(adjacent.to_owned()),
+        annotates_declaration: true,
+        scope: Scope::Function,
+        position: PositionRole::Leading,
+        unreliable: false,
+    });
+    comment
+}
+
+#[test]
+fn restate_cites_lexical_overlap() {
+    // `// counter` beside `counter += 1` is a literal restatement; the verdict
+    // carries the cited token so the block report can show it.
+    use claude_code_comment_checker::classify::classify;
+    use claude_code_comment_checker::{UnnecessaryKind, Verdict};
+    let comment = context_comment("// counter", "counter += 1");
+    let classify = classify(&comment);
+    let Verdict::Unnecessary {
+        reason: UnnecessaryKind::RestatesCode { evidence },
+    } = &classify
+    else {
+        panic!("expected RestatesCode, got {classify:?}");
+    };
+    assert_eq!(evidence.lexical, vec!["counter".to_owned()]);
+    assert!(evidence.operator.is_empty());
+}
+
+#[test]
+fn restate_cites_operator_paraphrase() {
+    // `// increment the counter` beside `counter += 1` is a paraphrased
+    // restatement: lexical overlap on `counter` plus the verb→operator table
+    // match `increment` ↔ `+=`.
+    use claude_code_comment_checker::UnnecessaryKind;
+    use claude_code_comment_checker::classify::classify;
+    let comment = context_comment("// increment the counter", "counter += 1");
+    let classify = classify(&comment);
+    let Verdict::Unnecessary {
+        reason: UnnecessaryKind::RestatesCode { evidence },
+    } = &classify
+    else {
+        panic!("expected RestatesCode, got {classify:?}");
+    };
+    assert_eq!(evidence.lexical, vec!["counter".to_owned()]);
+    assert_eq!(
+        evidence.operator,
+        vec![("increment".to_owned(), "+=".to_owned())]
+    );
+}
+
+#[test]
+fn restate_matches_operator_even_without_lexical_overlap() {
+    // `decrements` shares no token with `i -= 1`, but the operator table
+    // still catches the paraphrase.
+    use claude_code_comment_checker::UnnecessaryKind;
+    use claude_code_comment_checker::classify::classify;
+    let comment = context_comment("// decrements the counter", "i -= 1");
+    let classify = classify(&comment);
+    let Verdict::Unnecessary {
+        reason: UnnecessaryKind::RestatesCode { evidence },
+    } = &classify
+    else {
+        panic!("expected RestatesCode, got {classify:?}");
+    };
+    assert!(evidence.lexical.is_empty());
+    assert_eq!(
+        evidence.operator,
+        vec![("decrements".to_owned(), "-=".to_owned())]
+    );
+}
+
+#[test]
+fn restate_never_convicts_higher_abstraction_comment() {
+    // The precision moat: a comment that adds a constraint/why the code lacks
+    // is spared even next to restating words.
+    use claude_code_comment_checker::classify::classify;
+    use claude_code_comment_checker::{Justification, Verdict};
+    let comment = context_comment("// throttle to avoid the rate limit", "sleep(delay)");
+    assert_eq!(
+        classify(&comment),
+        Verdict::Justified {
+            reason: Justification::NonObviousIntent,
+        }
+    );
+    // …and a justified comment that merely shares a word with the code is not
+    // convicted on the overlap alone.
+    let comment = context_comment(
+        "// counter reads 1-based; code below is 0-based",
+        "let counter = 0;",
+    );
+    assert!(matches!(classify(&comment), Verdict::Justified { .. }));
+}
+
+#[test]
+fn restate_operator_table_requires_the_operator_in_code() {
+    // `add` must not fire just because a verb is in the table — the matched
+    // operator has to actually appear in the adjacent code.
+    use claude_code_comment_checker::classify::classify;
+    use claude_code_comment_checker::{UnnecessaryKind, Verdict};
+    let comment = context_comment("// add retries", "address = resolve()");
+    assert_eq!(
+        classify(&comment),
+        Verdict::Unnecessary {
+            reason: UnnecessaryKind::RestatesCode {
+                evidence: claude_code_comment_checker::RestateEvidence::default(),
+            },
+        }
+    );
+}
+
+#[test]
+fn restates_signature_with_lexical_evidence() {
+    // `// returns the user` beside `pub fn user()` is the classic signature
+    // echo: flagged, citing `user` (lexical overlap). The operator table does
+    // NOT fire — `return` never appears in this signature, and a verb in the
+    // table is not enough without its operator in the code.
+    use claude_code_comment_checker::UnnecessaryKind;
+    use claude_code_comment_checker::classify::classify;
+    let comment = context_comment("// returns the user", "pub fn user() -> User");
+    let classify = classify(&comment);
+    let Verdict::Unnecessary {
+        reason: UnnecessaryKind::RestatesCode { evidence },
+    } = &classify
+    else {
+        panic!("expected RestatesCode, got {classify:?}");
+    };
+    assert_eq!(evidence.lexical, vec!["user".to_owned()]);
+    assert!(evidence.operator.is_empty());
+}
+
+#[test]
+fn restate_detector_does_not_run_on_unreliable_context() {
+    // Fragment-bounded context (Edit/MultiEdit) must never drive a conviction:
+    // restate evidence stays empty there and the conservative downgrade wins.
+    use claude_code_comment_checker::classify::classify;
+    use claude_code_comment_checker::{
+        CommentContext, CommentType, Justification, PositionRole, Scope, Verdict,
+    };
+    let mut comment = Comment::new("// increment the counter", 1, CommentType::Line);
+    comment.context = Some(CommentContext {
+        adjacent_code: Some("counter += 1".into()),
+        annotates_declaration: false,
+        scope: Scope::Module,
+        position: PositionRole::Inline,
+        unreliable: true,
+    });
+    assert_eq!(
+        classify(&comment),
+        Verdict::Justified {
+            reason: Justification::NonObviousIntent,
         }
     );
 }

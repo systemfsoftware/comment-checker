@@ -118,7 +118,7 @@ pub enum Justification {
 }
 
 /// Why a comment should be removed.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum UnnecessaryKind {
     /// A memo-style note describing what changed, not why.
     AgentMemo,
@@ -126,8 +126,31 @@ pub enum UnnecessaryKind {
     CommentedOutCode,
     /// A `TODO`/`FIXME` with no tracked reference.
     VacuousTodo,
-    /// A comment that merely restates what the code already says.
-    RestatesCode,
+    /// A comment that merely restates what the code already says, with the
+    /// cited overlap that proves the restatement (U3).
+    RestatesCode { evidence: RestateEvidence },
+}
+
+/// The evidence that a comment restates its adjacent code (KTD3).
+///
+/// The verdict is only as trustworthy as the citation: an empty `lexical` and
+/// `operator` list marks the terminal text-only path (zero-overlap filler),
+/// never a context-aware claim.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Hash)]
+pub struct RestateEvidence {
+    /// Comment tokens that also appear in the adjacent code, in comment order.
+    pub lexical: Vec<String>,
+    /// `(comment verb, code operator)` pairs from the deterministic synonym
+    /// table — `increment` ↔ `+=`, `returns` ↔ `return`, …
+    pub operator: Vec<(String, String)>,
+}
+
+impl RestateEvidence {
+    /// True when neither path produced a citation.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.lexical.is_empty() && self.operator.is_empty()
+    }
 }
 
 /// The classification decision for a single comment.

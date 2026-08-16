@@ -48,5 +48,10 @@
   {"text": "// Implemented new feature", "code": "func main() {}", "position": "leading", "scope": "module", "language": "go", "comment_type": "line", "kind": "AgentMemo"},
   {"text": "// This is a comment", "code": "const total = 42;", "position": "leading", "scope": "module", "language": "javascript", "comment_type": "line", "kind": "RestatesCode"},
   {"text": "// This is a Go comment", "code": "package main", "position": "leading", "scope": "module", "language": "go", "comment_type": "line", "kind": "RestatesCode"},
-  {"text": "/* This is a block comment */", "code": "const x = 1;", "position": "leading", "scope": "module", "language": "typescript", "comment_type": "block", "kind": "RestatesCode"}
+  {"text": "/* This is a block comment */", "code": "const x = 1;", "position": "leading", "scope": "module", "language": "typescript", "comment_type": "block", "kind": "RestatesCode"},
+  {"text": "// counter", "code": "counter += 1;", "position": "leading", "scope": "module", "language": "rust", "comment_type": "line", "kind": "RestatesCode"},
+  {"text": "// increment the counter", "code": "counter += 1;", "position": "leading", "scope": "module", "language": "rust", "comment_type": "line", "kind": "RestatesCode"},
+  {"text": "// returns the user", "code": "pub fn user(id: u64) -> User", "position": "leading", "scope": "module", "language": "rust", "comment_type": "line", "kind": "RestatesCode"},
+  {"text": "# increments the counter", "code": "counter += 1", "position": "inline", "scope": "module", "language": "python", "comment_type": "line", "kind": "RestatesCode"},
+  {"text": "# throttle to avoid the rate limit", "code": "sleep(delay)", "position": "leading", "scope": "module", "language": "python", "comment_type": "line", "kind": "NonObviousIntent"}
 ]

@@ -84,3 +84,17 @@ fn report_names_the_reason() {
         "report was: {report}"
     );
 }
+
+#[test]
+fn report_cites_restate_evidence() {
+    // The block reason must show the overlap the verdict was built on, so the
+    // flag is checkable rather than hand-waved.
+    let input = write("foo.rs", "// increment the counter\ncounter += 1;\n");
+    let Outcome::Block { report } = check(&input, "") else {
+        panic!("expected a block");
+    };
+    assert!(
+        report.contains("shares counter") && report.contains("increment ↔ +="),
+        "report was: {report}"
+    );
+}

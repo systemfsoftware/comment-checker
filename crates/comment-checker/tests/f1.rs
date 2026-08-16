@@ -5,7 +5,9 @@
 
 mod common;
 
-use claude_code_comment_checker::{Justification, PositionRole, Scope, UnnecessaryKind, Verdict};
+use claude_code_comment_checker::{
+    Justification, PositionRole, RestateEvidence, Scope, UnnecessaryKind, Verdict,
+};
 use common::{
     Case, CommentKind, Label, evaluate, load_corpus, parse_corpus, per_kind_violations, predict,
     predict_detected,
@@ -169,7 +171,9 @@ fn per_kind_floor_catches_kind_level_regression() {
     // recall collapses while the overall F1 stays high on the AgentMemo pool.
     verdicts.extend([
         Verdict::Unnecessary {
-            reason: UnnecessaryKind::RestatesCode,
+            reason: UnnecessaryKind::RestatesCode {
+                evidence: RestateEvidence::default(),
+            },
         },
         Verdict::Justified {
             reason: Justification::NonObviousIntent,

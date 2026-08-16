@@ -3,7 +3,7 @@
 use crate::comment::{Comment, UnnecessaryKind};
 
 /// A comment the classifier marked unnecessary, kept for the report.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Flagged<'a> {
     pub comment: &'a Comment,
     pub kind: UnnecessaryKind,
@@ -27,7 +27,7 @@ pub fn format_report(flagged: &[Flagged<'_>], file_path: &str, custom_prompt: &s
             "  line {} — {} — {}",
             flag.comment.line_number,
             flag.comment.text.trim(),
-            reason_text(flag.kind),
+            reason_text(&flag.kind),
         ));
     }
     lines.push(String::new());
@@ -44,15 +44,28 @@ pub fn format_report(flagged: &[Flagged<'_>], file_path: &str, custom_prompt: &s
     }
 }
 
-fn reason_text(kind: UnnecessaryKind) -> &'static str {
+fn reason_text(kind: &UnnecessaryKind) -> String {
     match kind {
-        UnnecessaryKind::RestatesCode => "restates what the code already says",
-        UnnecessaryKind::AgentMemo => {
-            "describes what changed, not why — git history already records this"
+        UnnecessaryKind::RestatesCode { evidence } => {
+            let mut reason = "restates what the code already says".to_owned();
+            if !evidence.is_empty() {
+                let mut parts = Vec::new();
+                if !evidence.lexical.is_empty() {
+                    parts.push(format!("shares {}", evidence.lexical.join(", ")));
+                }
+                for (verb, op) in &evidence.operator {
+                    parts.push(format!("{verb} ↔ {op}"));
+                }
+                reason = format!("{reason} ({})", parts.join("; "));
+            }
+            reason
         }
-        UnnecessaryKind::CommentedOutCode => "dead code left in a comment",
+        UnnecessaryKind::AgentMemo => {
+            "describes what changed, not why — git history already records this".to_owned()
+        }
+        UnnecessaryKind::CommentedOutCode => "dead code left in a comment".to_owned(),
         UnnecessaryKind::VacuousTodo => {
-            "a TODO with no tracked reference — file a ticket or delete it"
+            "a TODO with no tracked reference — file a ticket or delete it".to_owned()
         }
     }
 }

@@ -3,7 +3,9 @@
 //! No I/O, no clock, no randomness, no branches — the decision is a fold over
 //! ordered rule tables (CONST-P1, CONST-P2).
 
-use crate::comment::{Comment, CommentType, Justification, PositionRole, UnnecessaryKind, Verdict};
+use crate::comment::{
+    Comment, CommentType, Justification, PositionRole, RestateEvidence, UnnecessaryKind, Verdict,
+};
 
 /// A classification rule: the reason it assigns and the predicate that
 /// recognises it. Predicates receive the comment's trimmed, lowercased text as
@@ -83,11 +85,17 @@ pub fn classify(comment: &Comment) -> Verdict {
                 .iter()
                 .find(|rule| (rule.matches)(text.as_str(), comment))
                 .map(|rule| Verdict::Unnecessary {
-                    reason: rule.reason,
+                    reason: rule.reason.clone(),
                 })
         })
-        .unwrap_or(Verdict::Unnecessary {
-            reason: UnnecessaryKind::RestatesCode,
+        .unwrap_or_else(|| {
+            // The context-aware restatement path is primary; the terminal
+            // rule (empty evidence) is retained for zero-overlap filler.
+            Verdict::Unnecessary {
+                reason: UnnecessaryKind::RestatesCode {
+                    evidence: restate_evidence(comment),
+                },
+            }
         });
     // Conservative downgrade: when a comment's structural context is unreliable
     // (Edit/MultiEdit fragment edge) the catch-all RestatesCode path is too
@@ -104,7 +112,7 @@ const fn is_unreliable_fallback(verdict: &Verdict) -> bool {
     matches!(
         verdict,
         Verdict::Unnecessary {
-            reason: UnnecessaryKind::RestatesCode
+            reason: UnnecessaryKind::RestatesCode { .. }
         }
     )
 }
@@ -112,26 +120,136 @@ const fn is_unreliable_fallback(verdict: &Verdict) -> bool {
 /// True when the comment's content-bearing vocabulary is mostly contained in
 /// the adjacent code's: at least half of the comment's content tokens also
 /// appear among the adjacent code's content tokens.
+///
+/// Lexical containment only — the operator table is an evidence *addition*
+/// ([`restate_evidence`]), not part of the doc-contract revocation check.
 #[must_use]
 pub fn restates_adjacent(comment: &Comment) -> bool {
+    lexical_containment(comment).is_some_and(|c| c >= RESTATE_CONTAINMENT)
+}
+
+/// The overlap threshold: half of the comment's unique content tokens must
+/// also appear in the adjacent code before the restatement claim is made.
+const RESTATE_CONTAINMENT: f64 = 0.5;
+
+/// The deterministic synonym/operator table (KTD3): a comment verb whose
+/// action the adjacent code expresses with an operator or keyword.
+const OPERATOR_TABLE: &[(&str, &[&str])] = &[
+    ("increment", &["+=", "++"]),
+    ("increments", &["+=", "++"]),
+    ("incrementing", &["+=", "++"]),
+    ("decrement", &["-=", "--"]),
+    ("decrements", &["-=", "--"]),
+    ("decrementing", &["-=", "--"]),
+    ("assign", &["=", ":="]),
+    ("assigns", &["=", ":="]),
+    ("assigned", &["=", ":="]),
+    ("return", &["return"]),
+    ("returns", &["return"]),
+    ("returning", &["return"]),
+    ("add", &["+"]),
+    ("adds", &["+"]),
+    ("adding", &["+"]),
+    ("subtract", &["-"]),
+    ("subtracts", &["-"]),
+    ("subtracting", &["-"]),
+    ("multiply", &["*"]),
+    ("multiplies", &["*"]),
+    ("multiplying", &["*"]),
+    ("divide", &["/"]),
+    ("divides", &["/"]),
+    ("dividing", &["/"]),
+    ("double", &["* 2", " *2"]),
+    ("doubles", &["* 2", " *2"]),
+    ("halve", &["/ 2", " /2"]),
+    ("halves", &["/ 2", " /2"]),
+];
+
+/// True when `adjacent` (lowercased) contains the operator `op`.
+///
+/// Word-like operators (`return`) match as whole tokens so `add` in
+/// `address` cannot fire; symbolic operators (`+=`, `+`, `*`) match as
+/// substrings, which a parse would confirm in every realistic spelling.
+fn code_contains_operator(
+    adjacent: &str,
+    adjacent_tokens: &std::collections::HashSet<String>,
+    op: &str,
+) -> bool {
+    if op.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        adjacent_tokens.contains(op)
+    } else {
+        adjacent.contains(op)
+    }
+}
+
+/// The evidence that `comment` restates its adjacent code (U3, KTD3): the
+/// overlapping tokens cited, and any verb→operator table matches.
+///
+/// Never called on unreliable context (Edit fragments); the caller falls back
+/// to the terminal text-only rule via empty evidence.
+#[must_use]
+pub fn restate_evidence(comment: &Comment) -> RestateEvidence {
     let Some(adjacent) = comment
         .context
         .as_ref()
+        .filter(|c| !c.unreliable)
         .and_then(|c| c.adjacent_code.as_ref())
     else {
-        return false;
+        return RestateEvidence::default();
     };
-    let comment_tokens = content_tokens(&comment.text);
+    let comment_tokens = ordered_content_tokens(&comment.text);
+    if comment_tokens.is_empty() {
+        return RestateEvidence::default();
+    }
+    let adjacent_tokens = content_tokens(adjacent);
+    let adjacent_lower = adjacent.to_ascii_lowercase();
+
+    let mut lexical = Vec::new();
+    let mut operator = Vec::new();
+    for token in &comment_tokens {
+        if adjacent_tokens.contains(token) {
+            lexical.push(token.clone());
+        }
+        if let Some((_, ops)) = OPERATOR_TABLE.iter().find(|(verb, _)| verb == token) {
+            if let Some(op) = ops
+                .iter()
+                .find(|op| code_contains_operator(&adjacent_lower, &adjacent_tokens, op))
+            {
+                operator.push((token.clone(), (*op).to_owned()));
+            }
+        }
+    }
+
+    let containment = f64::from(u32::try_from(lexical.len()).unwrap_or(0))
+        / f64::from(u32::try_from(comment_tokens.len()).unwrap_or(1));
+    let evidence = RestateEvidence { lexical, operator };
+    if containment >= RESTATE_CONTAINMENT || !evidence.operator.is_empty() {
+        evidence
+    } else {
+        RestateEvidence::default()
+    }
+}
+
+/// The lexical containment of the comment's vocabulary in its adjacent code,
+/// or `None` when the context is absent or carries no adjacent code.
+fn lexical_containment(comment: &Comment) -> Option<f64> {
+    let adjacent = comment
+        .context
+        .as_ref()
+        .and_then(|c| c.adjacent_code.as_ref())?;
+    let comment_tokens = ordered_content_tokens(&comment.text);
+    if comment_tokens.is_empty() {
+        return None;
+    }
     let adjacent_tokens = content_tokens(adjacent);
     let intersection = comment_tokens
         .iter()
         .filter(|t| adjacent_tokens.contains(*t))
         .count();
-    // `comment_tokens` is guaranteed non-empty by `content_tokens` dropping
-    // stop-words/markers only when caller text has none; empty → 0 < 0.5.
-    let containment = f64::from(u32::try_from(intersection).unwrap_or(0))
-        / f64::from(u32::try_from(comment_tokens.len()).unwrap_or(1));
-    containment >= 0.5
+    Some(
+        f64::from(u32::try_from(intersection).unwrap_or(0))
+            / f64::from(u32::try_from(comment_tokens.len()).unwrap_or(1)),
+    )
 }
 
 /// English stop-words stripped from content tokens. Compiled separately to
@@ -141,17 +259,24 @@ const STOP_WORDS: &[&str] = &[
     "that", "these", "those", "as", "by", "be", "are", "was", "but", "not", "no",
 ];
 
+/// The content-bearing tokens of `text` in order of first appearance.
+fn ordered_content_tokens(text: &str) -> Vec<String> {
+    let stripped = strip_comment_marker(text).trim().to_ascii_lowercase();
+    let mut seen = std::collections::HashSet::new();
+    stripped
+        .split(|c: char| !c.is_alphanumeric() && c != '_')
+        .filter(|s| !s.is_empty() && !STOP_WORDS.contains(s))
+        .filter(|s| seen.insert((*s).to_owned()))
+        .map(str::to_owned)
+        .collect()
+}
+
 /// The set of content-bearing tokens in `text`. Splits on whitespace and
 /// punctuation, lower-cases, strips comment markers and English stop-words.
 /// Returns owned strings so callers can decide lifetime.
 #[must_use]
 pub fn content_tokens(text: &str) -> std::collections::HashSet<String> {
-    let stripped = strip_comment_marker(text).trim().to_ascii_lowercase();
-    stripped
-        .split(|c: char| !c.is_alphanumeric() && c != '_')
-        .filter(|s| !s.is_empty() && !STOP_WORDS.contains(s))
-        .map(str::to_owned)
-        .collect()
+    ordered_content_tokens(text).into_iter().collect()
 }
 
 const COMMENT_MARKERS: &[&str] = &["//", "/*", "#", "--", "*"];
@@ -408,6 +533,8 @@ const INTENT_MARKERS: &[&str] = &[
     "security",
     "thread-safety",
     "thread safety",
+    "1-based",
+    "0-based",
     "@link",
 ];
 

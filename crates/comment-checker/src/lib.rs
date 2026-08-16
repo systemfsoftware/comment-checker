@@ -19,6 +19,6 @@ pub mod report;
 pub use check::{Outcome, check};
 pub use classify::classify;
 pub use comment::{
-    Comment, CommentContext, CommentType, Justification, PositionRole, Scope, UnnecessaryKind,
-    Verdict,
+    Comment, CommentContext, CommentType, Justification, PositionRole, RestateEvidence, Scope,
+    UnnecessaryKind, Verdict,
 };
