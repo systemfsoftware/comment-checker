@@ -61,6 +61,19 @@ fn edit_new_comment_blocks() {
 }
 
 #[test]
+fn edit_fragment_context_is_never_relied_upon() {
+    // U2 scenario: an Edit sees only the fragment, so a comment that would
+    // restate its adjacent code must NOT be convicted — the text-only floor
+    // downgrades, the hook passes, and the user is not blocked on context the
+    // fragment cannot vouch for.
+    let input = r#"{"tool_name":"Edit","tool_input":{"file_path":"foo.py","old_string":"counter = 0\n","new_string":"counter = 0\n# increment the counter\ncounter += 1\n"}}"#;
+    assert!(
+        matches!(check(input, ""), Outcome::Pass { .. }),
+        "an Edit fragment whose context is unreliable must fall back, not convict"
+    );
+}
+
+#[test]
 fn report_names_the_reason() {
     let input = write("foo.go", "// TODO: refactor later\n");
     let Outcome::Block { report } = check(&input, "") else {

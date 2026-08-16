@@ -101,6 +101,20 @@ fn trailing_comment_annotates_the_statement_beside_it() {
 }
 
 #[test]
+fn comment_inside_a_loop_reports_nested_block_scope() {
+    // U2 scenario: a comment inside a loop body is unambiguously nested, and
+    // its adjacent code is the loop statement it annotates.
+    let comment = only(
+        "for x in xs:\n    # filter the results\n    filtered.append(x)\n",
+        "a.py",
+    );
+    let ctx = comment.context.expect("context");
+    assert_eq!(ctx.scope, Scope::NestedBlock);
+    assert_eq!(ctx.position, PositionRole::Leading);
+    assert_eq!(ctx.adjacent_code.as_deref(), Some("filtered.append(x)"));
+}
+
+#[test]
 fn comment_above_a_plain_statement_does_not_annotate_a_declaration() {
     // `PositionRole` is positional: a comment first in the file occupies the
     // head slot even though it is not a docstring. What keeps that safe is the
