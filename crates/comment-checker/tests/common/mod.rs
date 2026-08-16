@@ -1,15 +1,19 @@
 //! Shared evaluation corpus and helpers (used by the F1 gate).
 //!
 //! The corpus is loaded from `eval/corpus.json` — the single source of truth
-//! (CONST-E1). Each case carries a kind-level ground-truth label so the gate
-//! can report per-kind and per-language precision/recall, not just one number.
+//! (CONST-E1). Each case carries a kind-level ground-truth label plus the
+//! structural context (adjacent code, position, scope) the classifier needs,
+//! so the gate exercises the real parse → detect → classify path against
+//! context-bearing code, not comment text in isolation.
 #![allow(dead_code)]
 
 use std::collections::BTreeMap;
 
 use claude_code_comment_checker::classify::classify;
 use claude_code_comment_checker::detect::detect_comments;
-use claude_code_comment_checker::{Comment, CommentType, Justification, UnnecessaryKind, Verdict};
+use claude_code_comment_checker::{
+    Comment, CommentType, Justification, PositionRole, Scope, UnnecessaryKind, Verdict,
+};
 use serde::Deserialize;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -21,8 +25,12 @@ pub enum Label {
 /// A single evaluation case, loaded from the canonical corpus JSON.
 pub struct Case {
     pub text: String,
+    /// The code this comment annotates, as the detector should capture it.
+    pub code: String,
+    pub position: PositionRole,
+    pub scope: Scope,
     pub language: String,
-    pub comment_type: CommentType,
+    pub comment_type: CommentKind,
     /// Ground-truth kind: the specific `Justification`/`UnnecessaryKind` name.
     pub kind: String,
     pub label: Label,
@@ -31,33 +39,85 @@ pub struct Case {
 #[derive(Deserialize)]
 struct RawCase {
     text: String,
+    code: String,
+    position: String,
+    scope: String,
     language: String,
     comment_type: String,
     kind: String,
 }
 
-/// Load the canonical corpus from `eval/corpus.json`.
-pub fn load_corpus() -> Vec<Case> {
-    let raw: Vec<RawCase> = serde_json::from_str(include_str!("../../../../eval/corpus.json"))
-        .expect("eval/corpus.json must be valid JSON");
+fn parse_position(value: &str) -> PositionRole {
+    match value {
+        "docstring-head" => PositionRole::DocstringHead,
+        "leading" => PositionRole::Leading,
+        "trailing" => PositionRole::Trailing,
+        "inline" => PositionRole::Inline,
+        other => panic!("unknown position: {other}"),
+    }
+}
+
+fn parse_scope(value: &str) -> Scope {
+    match value {
+        "module" => Scope::Module,
+        "function" => Scope::Function,
+        "nested" => Scope::NestedBlock,
+        other => panic!("unknown scope: {other}"),
+    }
+}
+
+/// Parse a corpus JSON document. Separated from [`load_corpus`] so malformed
+/// input can be tested without touching the canonical file.
+pub fn parse_corpus(json: &str) -> Vec<Case> {
+    let raw: Vec<RawCase> =
+        serde_json::from_str(json).expect("corpus JSON must parse as a case array");
     raw.into_iter()
         .map(|r| {
-            let comment_type = match r.comment_type.as_str() {
-                "line" => CommentType::Line,
-                "block" => CommentType::Block,
-                "docstring" => CommentType::Docstring,
-                other => panic!("unknown comment_type: {other}"),
-            };
             let label = kind_label(&r.kind);
             Case {
                 text: r.text,
+                code: r.code,
+                position: parse_position(&r.position),
+                scope: parse_scope(&r.scope),
                 language: r.language,
-                comment_type,
+                comment_type: parse_comment_type(&r.comment_type),
                 kind: r.kind,
                 label,
             }
         })
         .collect()
+}
+
+fn parse_comment_type(value: &str) -> CommentKind {
+    match value {
+        "line" => CommentKind::Line,
+        "block" => CommentKind::Block,
+        "docstring" => CommentKind::Docstring,
+        other => panic!("unknown comment_type: {other}"),
+    }
+}
+
+/// The syntactic form of a comment, in the corpus vocabulary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CommentKind {
+    Line,
+    Block,
+    Docstring,
+}
+
+impl CommentKind {
+    pub fn comment_type(self) -> CommentType {
+        match self {
+            CommentKind::Line => CommentType::Line,
+            CommentKind::Block => CommentType::Block,
+            CommentKind::Docstring => CommentType::Docstring,
+        }
+    }
+}
+
+/// Load the canonical corpus from `eval/corpus.json`.
+pub fn load_corpus() -> Vec<Case> {
+    parse_corpus(include_str!("../../../../eval/corpus.json"))
 }
 
 /// Binary label (justified vs unnecessary) for a kind name.
@@ -70,44 +130,38 @@ pub fn kind_label(kind: &str) -> Label {
     }
 }
 
-/// Classify a case's text in isolation (no structural context).
+/// Classify a case's text in isolation (no structural context) — the text-only
+/// floor, which must hold wherever context is unreliable.
 pub fn predict(case: &Case) -> Verdict {
-    let comment = Comment::new(case.text.clone(), 1, case.comment_type);
+    let comment = Comment::new(case.text.clone(), 1, case.comment_type.comment_type());
     classify(&comment)
 }
 
-/// A statement that parses on its own in `language`.
-fn filler_statement(language: &str) -> &'static str {
-    match language {
-        "bash" => "x=1",
-        "typescript" | "javascript" => "const x = 1;",
-        "go" => "package main",
-        "rust" => "pub fn f() {}",
-        "java" => "class A { int x = 1; }",
-        _ => "x = 1",
-    }
-}
-
-/// Wrap a case's comment in the smallest snippet that parses in its language
-/// and yields exactly that comment, so the gate can exercise the real
-/// parse → detect → classify path instead of hand-building a `Comment`.
+/// Wrap a case's comment and its authored adjacent code in the smallest
+/// snippet that parses in its language with the comment in the position the
+/// case describes, so the gate exercises the real parse → detect → classify
+/// path with context-bearing code.
 pub fn synthesize_source(case: &Case) -> String {
     let text = case.text.as_str();
-    if case.comment_type == CommentType::Docstring {
+    let code = case.code.as_str();
+    if case.comment_type == CommentKind::Docstring {
         return match case.language.as_str() {
-            // Python docstrings live at the head of a body.
-            "python" => format!("def f():\n    {text}\n    return 1\n"),
+            // Python docstrings live at the head of a module or body.
+            "python" if case.scope == Scope::Module => format!("{text}\n{code}\n"),
+            "python" => format!("def f():\n    {text}\n    {code}\n"),
             // Java doc comments must sit inside a class body.
-            "java" => format!("class A {{\n{text}\nint f() {{ return 1; }}\n}}\n"),
+            "java" => format!("class A {{\n{text}\n{code}\n}}\n"),
             // Brace languages: the doc comment precedes the declaration.
-            "typescript" | "javascript" => format!("{text}\nfunction f() {{}}\n"),
-            "go" => format!("package main\n\n{text}\nfunc F() {{}}\n"),
-            "rust" => format!("{text}\npub fn f() {{}}\n"),
-            other => format!("{text}\n{}\n", filler_statement(other)),
+            "typescript" | "javascript" | "rust" => format!("{text}\n{code}\n"),
+            "go" => format!("package main\n\n{text}\n{code}\n"),
+            other => panic!("no docstring snippet for language: {other}"),
         };
     }
-    // Line and block comments lead an ordinary statement.
-    format!("{text}\n{}\n", filler_statement(case.language.as_str()))
+    match case.position {
+        PositionRole::Leading | PositionRole::DocstringHead => format!("{text}\n{code}\n"),
+        PositionRole::Trailing => format!("{code}\n{text}\n"),
+        PositionRole::Inline => format!("{code} {text}\n"),
+    }
 }
 
 /// The file name the synthesized snippet should be parsed as.
@@ -192,15 +246,17 @@ pub struct F1 {
 #[derive(Debug, Default)]
 pub struct EvalReport {
     pub overall: F1,
-    pub by_kind: BTreeMap<&'static str, KindMetrics>,
+    pub by_kind: BTreeMap<String, KindMetrics>,
     pub by_language: BTreeMap<String, LangMetrics>,
 }
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct KindMetrics {
+    /// How many corpus cases carry this ground-truth kind.
+    pub actual: u32,
     /// How many cases the classifier assigned this kind.
     pub predicted: u32,
-    /// How many of those matched the ground-truth kind.
+    /// How many cases both carry and were assigned this kind.
     pub correct: u32,
 }
 
@@ -228,7 +284,11 @@ pub fn evaluate(corpus: &[Case], verdicts: &[Verdict]) -> EvalReport {
         }
 
         let got_kind = verdict_kind(verdict);
-        let k = report.by_kind.entry(got_kind).or_default();
+        // Ground-truth bucket independent of the prediction, so recall has a
+        // denominator; the predicted bucket counts assignments.
+        let actual_k = report.by_kind.entry(case.kind.clone()).or_default();
+        actual_k.actual += 1;
+        let k = report.by_kind.entry(got_kind.to_owned()).or_default();
         k.predicted += 1;
         if case.kind == got_kind {
             k.correct += 1;
@@ -253,3 +313,36 @@ pub fn evaluate(corpus: &[Case], verdicts: &[Verdict]) -> EvalReport {
     };
     report
 }
+
+/// The per-kind floor: any kind with at least `MIN_BUCKET` cases must reach
+/// `MIN_KIND_PRECISION` precision and `MIN_KIND_RECALL` recall, so a weak kind
+/// cannot hide inside the aggregate F1. Returns one violation string per
+/// failing kind.
+pub fn per_kind_violations(report: &EvalReport) -> Vec<String> {
+    let mut violations = Vec::new();
+    for (kind, m) in &report.by_kind {
+        if m.actual < MIN_BUCKET {
+            continue;
+        }
+        let precision =
+            f64::from(m.correct) / f64::from(if m.predicted == 0 { 1 } else { m.predicted });
+        let recall = f64::from(m.correct) / f64::from(m.actual);
+        if precision < MIN_KIND_PRECISION {
+            violations.push(format!(
+                "kind `{kind}` precision {precision:.3} < {MIN_KIND_PRECISION} (predicted {}, correct {})",
+                m.predicted, m.correct
+            ));
+        }
+        if recall < MIN_KIND_RECALL {
+            violations.push(format!(
+                "kind `{kind}` recall {recall:.3} < {MIN_KIND_RECALL} (actual {}, correct {})",
+                m.actual, m.correct
+            ));
+        }
+    }
+    violations
+}
+
+pub const MIN_BUCKET: u32 = 2;
+pub const MIN_KIND_PRECISION: f64 = 0.5;
+pub const MIN_KIND_RECALL: f64 = 0.5;

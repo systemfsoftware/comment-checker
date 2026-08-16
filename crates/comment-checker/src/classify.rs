@@ -41,12 +41,12 @@ static JUSTIFIED: &[Rule<Justification>] = &[
         matches: is_public_api_doc,
     },
     Rule {
-        reason: Justification::NonObviousIntent,
-        matches: is_non_obvious_intent,
-    },
-    Rule {
         reason: Justification::Attribution,
         matches: is_attribution,
+    },
+    Rule {
+        reason: Justification::NonObviousIntent,
+        matches: is_non_obvious_intent,
     },
 ];
 
@@ -408,7 +408,6 @@ const INTENT_MARKERS: &[&str] = &[
     "security",
     "thread-safety",
     "thread safety",
-    "ref:",
     "@link",
 ];
 
@@ -421,6 +420,8 @@ const ATTRIBUTION_MARKERS: &[&str] = &[
     "credit",
     "@see",
     "@link",
+    "ref:",
+    "source:",
 ];
 
 const AGENT_MEMO_PREFIXES: &[&str] = &[
