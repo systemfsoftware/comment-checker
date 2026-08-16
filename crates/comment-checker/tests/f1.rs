@@ -6,10 +6,10 @@
 mod common;
 
 use claude_code_comment_checker::{
-    Justification, PositionRole, RestateEvidence, Scope, UnnecessaryKind, Verdict,
+    CommentType, Justification, PositionRole, RestateEvidence, Scope, UnnecessaryKind, Verdict,
 };
 use common::{
-    Case, CommentKind, Label, evaluate, load_corpus, parse_corpus, per_kind_violations, predict,
+    Case, Label, evaluate, load_corpus, parse_corpus, per_kind_violations, predict,
     predict_detected,
 };
 
@@ -79,19 +79,13 @@ fn run_gate(name: &str, corpus: &[Case], verdicts: &[Verdict], context_dependent
     );
     eprintln!("=== per-kind (correct / actual / predicted) ===");
     for (kind, m) in &report.by_kind {
-        let precision = if m.predicted == 0 {
-            1.0
-        } else {
-            f64::from(m.correct) / f64::from(m.predicted)
-        };
-        let recall = if m.actual == 0 {
-            1.0
-        } else {
-            f64::from(m.correct) / f64::from(m.actual)
-        };
         eprintln!(
-            "  {kind}: {}/{} actual {} predicted (precision {precision:.3}, recall {recall:.3})",
-            m.correct, m.actual, m.predicted
+            "  {kind}: {}/{} actual {} predicted (precision {:.3}, recall {:.3})",
+            m.correct,
+            m.actual,
+            m.predicted,
+            m.precision(),
+            m.recall()
         );
     }
     eprintln!("=== per-language (tp/fp/fn) ===");
@@ -211,7 +205,7 @@ fn synthetic_case(kind: &str, label: Label) -> Case {
         position: PositionRole::Leading,
         scope: Scope::Module,
         language: "python".into(),
-        comment_type: CommentKind::Line,
+        comment_type: CommentType::Line,
         kind: kind.into(),
         label,
     }

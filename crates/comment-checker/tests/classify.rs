@@ -823,7 +823,7 @@ fn restate_operator_table_requires_the_operator_in_code() {
         classify(&comment),
         Verdict::Unnecessary {
             reason: UnnecessaryKind::RestatesCode {
-                evidence: claude_code_comment_checker::RestateEvidence::default(),
+                evidence: RestateEvidence::default(),
             },
         }
     );
@@ -885,7 +885,7 @@ fn restate_word_operators_match_as_tokens_not_substrings() {
         classify(&comment),
         Verdict::Unnecessary {
             reason: UnnecessaryKind::RestatesCode {
-                evidence: claude_code_comment_checker::RestateEvidence::default(),
+                evidence: RestateEvidence::default(),
             },
         }
     );
@@ -903,7 +903,7 @@ fn restate_evidence_needs_containment_not_any_overlap() {
         classify(&comment),
         Verdict::Unnecessary {
             reason: UnnecessaryKind::RestatesCode {
-                evidence: claude_code_comment_checker::RestateEvidence::default(),
+                evidence: RestateEvidence::default(),
             },
         }
     );
@@ -920,12 +920,13 @@ fn flow_narration_cites_the_construct() {
     let comment = context_comment("// loop over the items", "for item in items: process(item)");
     let classify = classify(&comment);
     let Verdict::Unnecessary {
-        reason: UnnecessaryKind::NarratesControlFlow { construct },
+        reason: UnnecessaryKind::NarratesControlFlow { verb, construct },
     } = &classify
     else {
         panic!("expected NarratesControlFlow, got {classify:?}");
     };
-    assert_eq!(construct, "for");
+    assert_eq!(*verb, "loop");
+    assert_eq!(*construct, "for");
 }
 
 #[test]
@@ -935,12 +936,13 @@ fn flow_narration_matches_while_for_iterate() {
     let comment = context_comment("// iterate the queue", "while queue: pop()");
     let classify = classify(&comment);
     let Verdict::Unnecessary {
-        reason: UnnecessaryKind::NarratesControlFlow { construct },
+        reason: UnnecessaryKind::NarratesControlFlow { verb, construct },
     } = &classify
     else {
         panic!("expected NarratesControlFlow, got {classify:?}");
     };
-    assert_eq!(construct, "while");
+    assert_eq!(*verb, "iterate");
+    assert_eq!(*construct, "while");
 }
 
 #[test]
@@ -954,7 +956,7 @@ fn flow_narration_requires_the_construct_in_code() {
         classify(&comment),
         Verdict::Unnecessary {
             reason: UnnecessaryKind::RestatesCode {
-                evidence: claude_code_comment_checker::RestateEvidence::default(),
+                evidence: RestateEvidence::default(),
             },
         }
     );
@@ -999,6 +1001,53 @@ fn flow_narration_never_overrides_intent() {
             reason: Justification::NonObviousIntent,
         }
     );
+}
+
+#[test]
+fn flow_narration_cites_the_exact_verb() {
+    // A single-token comment pins the verb equality: `loops` must return the
+    // `loops` entry, not a sibling row with a shared construct list — the
+    // (verb, construct) pair makes the equality difference observable.
+    use claude_code_comment_checker::UnnecessaryKind;
+    use claude_code_comment_checker::classify::classify;
+    let comment = context_comment("// loops", "while queue: work()");
+    let classify = classify(&comment);
+    let Verdict::Unnecessary {
+        reason: UnnecessaryKind::NarratesControlFlow { verb, construct },
+    } = &classify
+    else {
+        panic!("expected NarratesControlFlow, got {classify:?}");
+    };
+    assert_eq!(*verb, "loops");
+    assert_eq!(*construct, "while");
+}
+
+#[test]
+fn flow_narration_verb_row_must_match_the_code_construct() {
+    // `looping` maps to `for`/`while` constructs only — `iter` belongs to the
+    // `iterate` family. A mutated continue/equality would let `looping` pick
+    // up `iter`, which this pins as a non-match.
+    use claude_code_comment_checker::classify::classify;
+    use claude_code_comment_checker::{UnnecessaryKind, Verdict};
+    let comment = context_comment("// looping", "rows.iter().next()");
+    assert_eq!(
+        classify(&comment),
+        Verdict::Unnecessary {
+            reason: UnnecessaryKind::RestatesCode {
+                evidence: RestateEvidence::default(),
+            },
+        }
+    );
+}
+
+#[test]
+fn restate_evidence_wrapper_uses_reliable_adjacent_code() {
+    // The public wrapper must actually run the detector — the fallback calls
+    // the inner path directly, so only a direct wrapper test sees it.
+    use claude_code_comment_checker::classify::restate_evidence;
+    let comment = context_comment("// counter", "counter += 1");
+    let evidence = restate_evidence(&comment);
+    assert_eq!(evidence.lexical, vec!["counter".to_owned()]);
 }
 
 #[test]

@@ -30,7 +30,7 @@ pub struct Case {
     pub position: PositionRole,
     pub scope: Scope,
     pub language: String,
-    pub comment_type: CommentKind,
+    pub comment_type: CommentType,
     /// Ground-truth kind: the specific `Justification`/`UnnecessaryKind` name.
     pub kind: String,
     pub label: Label,
@@ -88,30 +88,12 @@ pub fn parse_corpus(json: &str) -> Vec<Case> {
         .collect()
 }
 
-fn parse_comment_type(value: &str) -> CommentKind {
+fn parse_comment_type(value: &str) -> CommentType {
     match value {
-        "line" => CommentKind::Line,
-        "block" => CommentKind::Block,
-        "docstring" => CommentKind::Docstring,
+        "line" => CommentType::Line,
+        "block" => CommentType::Block,
+        "docstring" => CommentType::Docstring,
         other => panic!("unknown comment_type: {other}"),
-    }
-}
-
-/// The syntactic form of a comment, in the corpus vocabulary.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CommentKind {
-    Line,
-    Block,
-    Docstring,
-}
-
-impl CommentKind {
-    pub fn comment_type(self) -> CommentType {
-        match self {
-            CommentKind::Line => CommentType::Line,
-            CommentKind::Block => CommentType::Block,
-            CommentKind::Docstring => CommentType::Docstring,
-        }
     }
 }
 
@@ -137,7 +119,7 @@ pub fn kind_label(kind: &str) -> Label {
 /// Classify a case's text in isolation (no structural context) — the text-only
 /// floor, which must hold wherever context is unreliable.
 pub fn predict(case: &Case) -> Verdict {
-    let comment = Comment::new(case.text.clone(), 1, case.comment_type.comment_type());
+    let comment = Comment::new(case.text.clone(), 1, case.comment_type);
     classify(&comment)
 }
 
@@ -148,7 +130,7 @@ pub fn predict(case: &Case) -> Verdict {
 pub fn synthesize_source(case: &Case) -> String {
     let text = case.text.as_str();
     let code = case.code.as_str();
-    if case.comment_type == CommentKind::Docstring {
+    if case.comment_type == CommentType::Docstring {
         return match case.language.as_str() {
             // Python docstrings live at the head of a module or body.
             "python" if case.scope == Scope::Module => format!("{text}\n{code}\n"),
@@ -162,11 +144,10 @@ pub fn synthesize_source(case: &Case) -> String {
         };
     }
     match (case.position, case.scope) {
-        (PositionRole::Leading | PositionRole::DocstringHead, Scope::Function) => {
-            match case.language.as_str() {
-                "python" => format!("def f():\n    {text}\n    {code}\n"),
-                _ => format!("{text}\n{code}\n"),
-            }
+        (PositionRole::Leading | PositionRole::DocstringHead, Scope::Function)
+            if case.language == "python" =>
+        {
+            format!("def f():\n    {text}\n    {code}\n")
         }
         (PositionRole::Leading | PositionRole::DocstringHead, _) => format!("{text}\n{code}\n"),
         (PositionRole::Trailing, _) => format!("{code}\n{text}\n"),
@@ -271,6 +252,28 @@ pub struct KindMetrics {
     pub correct: u32,
 }
 
+impl KindMetrics {
+    /// Precision with floor semantics: a kind that never fires scores zero,
+    /// so it cannot masquerade as perfect. Display and floor assertions share
+    /// this so the printed matrix can never disagree with the gate.
+    pub fn precision(&self) -> f64 {
+        if self.predicted == 0 {
+            0.0
+        } else {
+            f64::from(self.correct) / f64::from(self.predicted)
+        }
+    }
+
+    /// Recall against the ground-truth bucket; zero-case kinds score zero.
+    pub fn recall(&self) -> f64 {
+        if self.actual == 0 {
+            0.0
+        } else {
+            f64::from(self.correct) / f64::from(self.actual)
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct LangMetrics {
     pub tp: u32,
@@ -339,9 +342,8 @@ pub fn per_kind_violations(report: &EvalReport, context_dependent: &[&str]) -> V
         if m.actual < MIN_BUCKET || context_dependent.contains(&kind.as_str()) {
             continue;
         }
-        let precision =
-            f64::from(m.correct) / f64::from(if m.predicted == 0 { 1 } else { m.predicted });
-        let recall = f64::from(m.correct) / f64::from(m.actual);
+        let precision = m.precision();
+        let recall = m.recall();
         if precision < MIN_KIND_PRECISION {
             violations.push(format!(
                 "kind `{kind}` precision {precision:.3} < {MIN_KIND_PRECISION} (predicted {}, correct {})",

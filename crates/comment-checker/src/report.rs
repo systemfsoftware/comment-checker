@@ -46,7 +46,7 @@ pub fn format_report(flagged: &[Flagged<'_>], file_path: &str, custom_prompt: &s
 
 fn reason_text(kind: &UnnecessaryKind) -> String {
     match kind {
-        UnnecessaryKind::NarratesControlFlow { construct } => {
+        UnnecessaryKind::NarratesControlFlow { construct, .. } => {
             format!("narrates the {construct} construct the code already shows")
         }
         UnnecessaryKind::RestatesCode { evidence } => {

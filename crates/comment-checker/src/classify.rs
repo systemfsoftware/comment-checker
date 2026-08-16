@@ -93,15 +93,24 @@ pub fn classify(comment: &Comment) -> Verdict {
             // comment that narrates a loop/iteration already visible in the
             // code names the construct. The context-aware restatement path is
             // primary for everything else; the terminal rule (empty evidence)
-            // is retained for zero-overlap filler.
-            if let Some(construct) = flow_narration(comment) {
+            // is retained for zero-overlap filler. The comment is tokenized
+            // once and shared by both context-aware paths.
+            let Some(adjacent) = reliable_adjacent(comment) else {
                 return Verdict::Unnecessary {
-                    reason: UnnecessaryKind::NarratesControlFlow { construct },
+                    reason: UnnecessaryKind::RestatesCode {
+                        evidence: RestateEvidence::default(),
+                    },
+                };
+            };
+            let comment_tokens = ordered_content_tokens(&comment.text);
+            if let Some((verb, construct)) = flow_construct(adjacent, &comment_tokens) {
+                return Verdict::Unnecessary {
+                    reason: UnnecessaryKind::NarratesControlFlow { verb, construct },
                 };
             }
             Verdict::Unnecessary {
                 reason: UnnecessaryKind::RestatesCode {
-                    evidence: restate_evidence(comment),
+                    evidence: restate_with_tokens(adjacent, &comment_tokens),
                 },
             }
         });
@@ -173,11 +182,13 @@ const OPERATOR_TABLE: &[(&str, &[&str])] = &[
     ("halves", &["/ 2", " /2"]),
 ];
 
-/// True when `adjacent` (lowercased) contains the operator `op`.
+/// True when `adjacent` contains the operator `op`.
 ///
 /// Word-like operators (`return`) match as whole tokens so `add` in
 /// `address` cannot fire; symbolic operators (`+=`, `+`, `*`) match as
-/// substrings, which a parse would confirm in every realistic spelling.
+/// substrings. `adjacent` is the raw (non-lowercased) code text: every
+/// symbolic operator is case-free, and the only word-like operator matches
+/// through the already-lowercased token set.
 fn code_contains_operator(
     adjacent: &str,
     adjacent_tokens: &std::collections::HashSet<String>,
@@ -197,45 +208,74 @@ fn code_contains_operator(
 /// to the terminal text-only rule via empty evidence.
 #[must_use]
 pub fn restate_evidence(comment: &Comment) -> RestateEvidence {
-    let Some(adjacent) = comment
-        .context
-        .as_ref()
-        .filter(|c| !c.unreliable)
-        .and_then(|c| c.adjacent_code.as_ref())
-    else {
+    let Some(adjacent) = reliable_adjacent(comment) else {
         return RestateEvidence::default();
     };
-    let comment_tokens = ordered_content_tokens(&comment.text);
+    restate_with_tokens(adjacent, &ordered_content_tokens(&comment.text))
+}
+
+/// Restatement evidence for a reliable adjacent code and the comment's
+/// already-tokenized content.
+fn restate_with_tokens(adjacent: &str, comment_tokens: &[String]) -> RestateEvidence {
     if comment_tokens.is_empty() {
         return RestateEvidence::default();
     }
     let adjacent_tokens = content_tokens(adjacent);
-    let adjacent_lower = adjacent.to_ascii_lowercase();
 
-    let mut lexical = Vec::new();
+    let mut lexical: Vec<String> = Vec::new();
     let mut operator = Vec::new();
-    for token in &comment_tokens {
+    for token in comment_tokens {
         if adjacent_tokens.contains(token) {
             lexical.push(token.clone());
         }
         if let Some((_, ops)) = OPERATOR_TABLE.iter().find(|(verb, _)| verb == token) {
             if let Some(op) = ops
                 .iter()
-                .find(|op| code_contains_operator(&adjacent_lower, &adjacent_tokens, op))
+                .find(|op| code_contains_operator(adjacent, &adjacent_tokens, op))
             {
                 operator.push((token.clone(), (*op).to_owned()));
             }
         }
     }
 
-    let containment = f64::from(u32::try_from(lexical.len()).unwrap_or(0))
-        / f64::from(u32::try_from(comment_tokens.len()).unwrap_or(1));
+    let containment = containment_ratio(lexical.len(), comment_tokens.len());
     let evidence = RestateEvidence { lexical, operator };
     if containment >= RESTATE_CONTAINMENT || !evidence.operator.is_empty() {
         evidence
     } else {
         RestateEvidence::default()
     }
+}
+
+/// The adjacent code of `comment`, only when its context is reliable.
+///
+/// Fragments (Edit/MultiEdit) carry context that may be incomplete at the
+/// edge; both context-aware detectors refuse to convict on it.
+fn reliable_adjacent(comment: &Comment) -> Option<&str> {
+    comment
+        .context
+        .as_ref()
+        .filter(|c| !c.unreliable)
+        .and_then(|c| c.adjacent_code.as_deref())
+}
+
+/// intersection/total with overflow-safe integer math, shared by every
+/// containment computation so the divide cannot drift between callers.
+fn containment_ratio(intersection: usize, total: usize) -> f64 {
+    f64::from(u32::try_from(intersection).unwrap_or(0))
+        / f64::from(u32::try_from(total).unwrap_or(1))
+}
+
+/// The comment's content tokens that also appear in the adjacent code, in
+/// comment order.
+fn lexical_overlap<'a>(
+    comment_tokens: &'a [String],
+    adjacent_tokens: &std::collections::HashSet<String>,
+) -> Vec<&'a String> {
+    comment_tokens
+        .iter()
+        .filter(|t| adjacent_tokens.contains(*t))
+        .collect()
 }
 
 /// Comment verbs that narrate iteration, mapped to the code constructs that
@@ -251,64 +291,63 @@ const FLOW_VERBS: &[(&str, &[&str])] = &[
     ("iterated", &["for", "while", "foreach", "iter"]),
 ];
 
-/// The control-flow construct a comment narrates, if any: a flow verb in the
-/// comment matched against a construct token in the reliable adjacent code.
-/// Word-token matching keeps `format` from satisfying `for`.
-fn flow_narration(comment: &Comment) -> Option<String> {
-    let adjacent = comment
-        .context
-        .as_ref()
-        .filter(|c| !c.unreliable)
-        .and_then(|c| c.adjacent_code.as_ref())?;
-    let comment_tokens = ordered_content_tokens(&comment.text);
+/// The control-flow construct a comment narrates, if any: the first flow verb
+/// the comment contains (verbatim, in table order) matched against a construct
+/// token in the reliable adjacent code. Word-token matching keeps `format`
+/// from satisfying `for`. The (verb, construct) pair is returned so the
+/// verdict cites both sides of the match.
+fn flow_construct(
+    adjacent: &str,
+    comment_tokens: &[String],
+) -> Option<(&'static str, &'static str)> {
+    let (verb, constructs) = FLOW_VERBS
+        .iter()
+        .find(|(verb, _)| comment_tokens.iter().any(|t| t == verb))?;
     // Constructs are code keywords (`for`, `while`, `iter`) — matched against
     // the raw token stream because the stop-word list would strip `for`/`in`
-    // from English-heavy code text.
+    // from English-heavy code text. The adjacent code is only tokenized once
+    // a flow verb is present in the comment.
     let adjacent_keywords = raw_keyword_tokens(adjacent);
-    for (verb, constructs) in FLOW_VERBS {
-        if !comment_tokens.iter().any(|t| t == verb) {
-            continue;
-        }
-        if let Some(construct) = constructs
-            .iter()
-            .find(|c| adjacent_keywords.iter().any(|t| t.as_str() == **c))
-        {
-            return Some((*construct).to_owned());
-        }
-    }
-    None
+    let construct = constructs
+        .iter()
+        .find(|c| adjacent_keywords.iter().any(|t| t.as_str() == **c))?;
+    Some((verb, *construct))
 }
 
-/// Whitespace/punctuation-delimited tokens with no stop-word stripping.
-fn raw_keyword_tokens(text: &str) -> Vec<String> {
-    let mut seen = std::collections::HashSet::new();
+/// Tokenize `text` on anything that is not alphanumeric or an underscore.
+/// Shared by the content-token and keyword vocabularies; case handling stays
+/// with each caller.
+fn split_tokens(text: &str) -> impl Iterator<Item = &str> {
     text.split(|c: char| !c.is_alphanumeric() && c != '_')
         .filter(|s| !s.is_empty())
-        .filter(|s| seen.insert((*s).to_owned()))
+}
+
+/// Whitespace/punctuation-delimited keywords with no stop-word stripping and
+/// no case folding.
+fn raw_keyword_tokens(text: &str) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    split_tokens(text)
+        .filter(|s| seen.insert(*s))
         .map(str::to_owned)
         .collect()
 }
 
 /// The lexical containment of the comment's vocabulary in its adjacent code,
 /// or `None` when the context is absent or carries no adjacent code.
+///
+/// Deliberately NOT filtered for unreliable context: this feeds the
+/// doc-contract revocation and must see the text even on fragments.
 fn lexical_containment(comment: &Comment) -> Option<f64> {
-    let adjacent = comment
-        .context
-        .as_ref()
-        .and_then(|c| c.adjacent_code.as_ref())?;
+    let adjacent = comment.context.as_ref()?.adjacent_code.as_deref()?;
     let comment_tokens = ordered_content_tokens(&comment.text);
     if comment_tokens.is_empty() {
         return None;
     }
     let adjacent_tokens = content_tokens(adjacent);
-    let intersection = comment_tokens
-        .iter()
-        .filter(|t| adjacent_tokens.contains(*t))
-        .count();
-    Some(
-        f64::from(u32::try_from(intersection).unwrap_or(0))
-            / f64::from(u32::try_from(comment_tokens.len()).unwrap_or(1)),
-    )
+    Some(containment_ratio(
+        lexical_overlap(&comment_tokens, &adjacent_tokens).len(),
+        comment_tokens.len(),
+    ))
 }
 
 /// English stop-words stripped from content tokens. Compiled separately to
@@ -322,10 +361,9 @@ const STOP_WORDS: &[&str] = &[
 fn ordered_content_tokens(text: &str) -> Vec<String> {
     let stripped = strip_comment_marker(text).trim().to_ascii_lowercase();
     let mut seen = std::collections::HashSet::new();
-    stripped
-        .split(|c: char| !c.is_alphanumeric() && c != '_')
-        .filter(|s| !s.is_empty() && !STOP_WORDS.contains(s))
-        .filter(|s| seen.insert((*s).to_owned()))
+    split_tokens(&stripped)
+        .filter(|s| !STOP_WORDS.contains(s))
+        .filter(|s| seen.insert(*s))
         .map(str::to_owned)
         .collect()
 }
@@ -436,47 +474,24 @@ fn is_public_api_doc(text: &str, comment: &Comment) -> bool {
 }
 
 /// Contract markup that must *lead* a non-docstring comment (after its marker
-/// and margin) for it to be read as interface documentation. Attribution-only
-/// tags (`@author`, `@see`, `ref:`, …) are excluded — they justify via their
-/// own rule and must not masquerade as contracts.
-const CONTRACT_LEAD_MARKUP: &[&str] = &[
-    "@param",
-    "@returns",
-    "@return",
-    "@throws",
-    "@raises",
-    "@exception",
-    "@example",
-    "@deprecated",
-    "@since",
-    "@type",
-    "@typedef",
-    "@property",
-    "# examples",
-    "# panics",
-    "# errors",
-    "# safety",
-    ":param",
-    ":return:",
-    ":rtype:",
-    ":raises:",
-    ":type",
-    "args:",
-    "returns:",
-    "raises:",
-    "yields:",
-    "attributes:",
-    "@brief",
-    "@details",
-    "@note",
-    "@warning",
-];
+/// and margin) for it to be read as interface documentation. Derived from
+/// [`DOC_MARKUP`] so the two tables cannot drift: everything in `DOC_MARKUP`
+/// except the attribution-only tags, plus the lead-only additions.
+///
+/// The excluded tags (`@see`, `@author`) have no other `DOC_MARKUP` prefix, so
+/// the exclusion cannot shadow a contract tag. Attribution tags justify via
+/// their own rule and must not masquerade as contracts.
+const CONTRACT_LEAD_EXCLUDED: &[&str] = &["@see", "@author"];
+const CONTRACT_LEAD_EXTRAS: &[&str] = &["@note", "@warning"];
 
 /// True when the first content of the comment (after stripping the marker) is
 /// a contract tag.
 fn leads_with_contract_markup(text: &str) -> bool {
     let s = stripped_after_marker(text);
-    CONTRACT_LEAD_MARKUP.iter().any(|m| s.starts_with(m))
+    if any_starts(s, CONTRACT_LEAD_EXCLUDED) {
+        return false;
+    }
+    any_starts(s, DOC_MARKUP) || any_starts(s, CONTRACT_LEAD_EXTRAS)
 }
 
 fn is_non_obvious_intent(text: &str, _comment: &Comment) -> bool {
