@@ -819,3 +819,39 @@ fn restate_detector_does_not_run_on_unreliable_context() {
         }
     );
 }
+
+#[test]
+fn restate_word_operators_match_as_tokens_not_substrings() {
+    // `return_value` contains the letters of `return` but is not the keyword:
+    // the operator path must not fire on the substring. This pins the
+    // alphanumeric-vs-symbolic split in `code_contains_operator`.
+    use claude_code_comment_checker::classify::classify;
+    use claude_code_comment_checker::{UnnecessaryKind, Verdict};
+    let comment = context_comment("// returns the value", "let return_value = 1;");
+    assert_eq!(
+        classify(&comment),
+        Verdict::Unnecessary {
+            reason: UnnecessaryKind::RestatesCode {
+                evidence: claude_code_comment_checker::RestateEvidence::default(),
+            },
+        }
+    );
+}
+
+#[test]
+fn restate_evidence_needs_containment_not_any_overlap() {
+    // One shared token out of three is not a restatement claim: the evidence
+    // stays empty (the mutant that turns `/` into `*` would fire on any
+    // nonzero overlap and must die).
+    use claude_code_comment_checker::classify::classify;
+    use claude_code_comment_checker::{UnnecessaryKind, Verdict};
+    let comment = context_comment("// alpha beta gamma", "let alpha = 1;");
+    assert_eq!(
+        classify(&comment),
+        Verdict::Unnecessary {
+            reason: UnnecessaryKind::RestatesCode {
+                evidence: claude_code_comment_checker::RestateEvidence::default(),
+            },
+        }
+    );
+}
