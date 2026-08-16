@@ -908,3 +908,119 @@ fn restate_evidence_needs_containment_not_any_overlap() {
         }
     );
 }
+
+// U5 — flow narration: a comment that restates a loop/iteration construct.
+
+#[test]
+fn flow_narration_cites_the_construct() {
+    // `// loop over the items` beside the for-loop it narrates gets a specific
+    // reason, not the generic restatement fallback.
+    use claude_code_comment_checker::UnnecessaryKind;
+    use claude_code_comment_checker::classify::classify;
+    let comment = context_comment("// loop over the items", "for item in items: process(item)");
+    let classify = classify(&comment);
+    let Verdict::Unnecessary {
+        reason: UnnecessaryKind::NarratesControlFlow { construct },
+    } = &classify
+    else {
+        panic!("expected NarratesControlFlow, got {classify:?}");
+    };
+    assert_eq!(construct, "for");
+}
+
+#[test]
+fn flow_narration_matches_while_for_iterate() {
+    use claude_code_comment_checker::UnnecessaryKind;
+    use claude_code_comment_checker::classify::classify;
+    let comment = context_comment("// iterate the queue", "while queue: pop()");
+    let classify = classify(&comment);
+    let Verdict::Unnecessary {
+        reason: UnnecessaryKind::NarratesControlFlow { construct },
+    } = &classify
+    else {
+        panic!("expected NarratesControlFlow, got {classify:?}");
+    };
+    assert_eq!(construct, "while");
+}
+
+#[test]
+fn flow_narration_requires_the_construct_in_code() {
+    // A flow verb alone names nothing: without a matching construct token in
+    // the adjacent code the comment falls through to the restatement path.
+    use claude_code_comment_checker::classify::classify;
+    use claude_code_comment_checker::{UnnecessaryKind, Verdict};
+    let comment = context_comment("// loop the result", "bake(bread)");
+    assert_eq!(
+        classify(&comment),
+        Verdict::Unnecessary {
+            reason: UnnecessaryKind::RestatesCode {
+                evidence: claude_code_comment_checker::RestateEvidence::default(),
+            },
+        }
+    );
+}
+
+#[test]
+fn flow_narration_requires_an_actual_flow_verb() {
+    // `run` is not a flow verb — the construct alone is silent, and the
+    // comment is a plain restatement, not flow narration.
+    use claude_code_comment_checker::UnnecessaryKind::{self, NarratesControlFlow};
+    use claude_code_comment_checker::classify::classify;
+    let comment = context_comment("// run each item", "for item in items: run(item)");
+    let classify = classify(&comment);
+    let Verdict::Unnecessary {
+        reason: UnnecessaryKind::RestatesCode { evidence },
+    } = &classify
+    else {
+        panic!("expected RestatesCode, got {classify:?}");
+    };
+    assert_eq!(evidence.lexical, vec!["run".to_owned(), "item".to_owned()]);
+    assert!(!matches!(
+        classify,
+        Verdict::Unnecessary {
+            reason: NarratesControlFlow { .. }
+        }
+    ));
+}
+
+#[test]
+fn flow_narration_never_overrides_intent() {
+    // The justification tables run first: a loop comment that explains *why*
+    // (backoff, rate limit) is spared, not branded flow narration.
+    use claude_code_comment_checker::classify::classify;
+    use claude_code_comment_checker::{Justification, Verdict};
+    let comment = context_comment(
+        "// loop with backoff to avoid the rate limit",
+        "for attempt in attempts: send(request)",
+    );
+    assert_eq!(
+        classify(&comment),
+        Verdict::Justified {
+            reason: Justification::NonObviousIntent,
+        }
+    );
+}
+
+#[test]
+fn flow_narration_does_not_fire_on_unreliable_context() {
+    // Fragment context cannot vouch for the construct; the conservative
+    // downgrade applies instead of a flow conviction.
+    use claude_code_comment_checker::classify::classify;
+    use claude_code_comment_checker::{
+        CommentContext, CommentType, Justification, PositionRole, Scope, Verdict,
+    };
+    let mut comment = Comment::new("// loop over the items", 1, CommentType::Line);
+    comment.context = Some(CommentContext {
+        adjacent_code: Some("for item in items: process(item)".into()),
+        annotates_declaration: false,
+        scope: Scope::Function,
+        position: PositionRole::Leading,
+        unreliable: true,
+    });
+    assert_eq!(
+        classify(&comment),
+        Verdict::Justified {
+            reason: Justification::NonObviousIntent,
+        }
+    );
+}

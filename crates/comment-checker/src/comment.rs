@@ -126,6 +126,10 @@ pub enum UnnecessaryKind {
     CommentedOutCode,
     /// A `TODO`/`FIXME` with no tracked reference.
     VacuousTodo,
+    /// A comment that narrates a control-flow construct (`loop`, `iterate`)
+    /// that the adjacent code already expresses (`for`, `while`, …), with the
+    /// matched construct cited (U5).
+    NarratesControlFlow { construct: String },
     /// A comment that merely restates what the code already says, with the
     /// cited overlap that proves the restatement (U3).
     RestatesCode { evidence: RestateEvidence },

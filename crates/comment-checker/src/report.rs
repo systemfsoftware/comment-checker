@@ -46,6 +46,9 @@ pub fn format_report(flagged: &[Flagged<'_>], file_path: &str, custom_prompt: &s
 
 fn reason_text(kind: &UnnecessaryKind) -> String {
     match kind {
+        UnnecessaryKind::NarratesControlFlow { construct } => {
+            format!("narrates the {construct} construct the code already shows")
+        }
         UnnecessaryKind::RestatesCode { evidence } => {
             let mut reason = "restates what the code already says".to_owned();
             if !evidence.is_empty() {

@@ -54,5 +54,8 @@
   {"text": "// returns the user", "code": "pub fn user(id: u64) -> User", "position": "leading", "scope": "module", "language": "rust", "comment_type": "line", "kind": "RestatesCode"},
   {"text": "# increments the counter", "code": "counter += 1", "position": "inline", "scope": "module", "language": "python", "comment_type": "line", "kind": "RestatesCode"},
   {"text": "# throttle to avoid the rate limit", "code": "sleep(delay)", "position": "leading", "scope": "module", "language": "python", "comment_type": "line", "kind": "NonObviousIntent"},
-  {"text": "# Returns: the user", "code": "def user(id); end", "position": "leading", "scope": "module", "language": "ruby", "comment_type": "line", "kind": "PublicApiDoc"}
+  {"text": "# Returns: the user", "code": "def user(id); end", "position": "leading", "scope": "module", "language": "ruby", "comment_type": "line", "kind": "PublicApiDoc"},
+  {"text": "# loop over each item", "code": "for item in items: dispatch(item)", "position": "leading", "scope": "function", "language": "python", "comment_type": "line", "kind": "NarratesControlFlow"},
+  {"text": "# iterate the results", "code": "for result in results: emit(result)", "position": "leading", "scope": "function", "language": "python", "comment_type": "line", "kind": "NarratesControlFlow"},
+  {"text": "# retry the loop to avoid the rate limit", "code": "for attempt in attempts: send(request)", "position": "leading", "scope": "function", "language": "python", "comment_type": "line", "kind": "NonObviousIntent"}
 ]

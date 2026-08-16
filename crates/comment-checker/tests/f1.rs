@@ -50,7 +50,7 @@ fn detected_path_reaches_f1_threshold() {
                 .unwrap_or_else(|| panic!("case not detected: [{}] {:?}", case.language, case.text))
         })
         .collect();
-    run_gate("detected path", &corpus, &verdicts);
+    run_gate("detected path", &corpus, &verdicts, &[]);
 }
 
 /// The same floors on the text-only path — the floor that must hold wherever
@@ -59,10 +59,18 @@ fn detected_path_reaches_f1_threshold() {
 fn classifier_reaches_f1_threshold() {
     let corpus = load_corpus();
     let verdicts: Vec<_> = corpus.iter().map(predict).collect();
-    run_gate("text-only path", &corpus, &verdicts);
+    // NarratesControlFlow only exists with structural context; on the
+    // text-only path it degrades to RestatesCode by design, so its floor is
+    // asserted on the detected path only.
+    run_gate(
+        "text-only path",
+        &corpus,
+        &verdicts,
+        &["NarratesControlFlow"],
+    );
 }
 
-fn run_gate(name: &str, corpus: &[Case], verdicts: &[Verdict]) {
+fn run_gate(name: &str, corpus: &[Case], verdicts: &[Verdict], context_dependent: &[&str]) {
     let report = evaluate(corpus, verdicts);
     eprintln!("=== {name} ===");
     eprintln!(
@@ -108,7 +116,7 @@ fn run_gate(name: &str, corpus: &[Case], verdicts: &[Verdict]) {
         report.overall.recall
     );
 
-    let violations = per_kind_violations(&report);
+    let violations = per_kind_violations(&report, context_dependent);
     assert!(
         violations.is_empty(),
         "per-kind floor violations on the {name}:\n{}",
@@ -150,7 +158,7 @@ fn malformed_corpus_fails_loudly() {
 fn zero_case_kind_reports_gracefully() {
     let report = evaluate(&[], &[]);
     assert!(report.by_kind.is_empty());
-    assert!(per_kind_violations(&report).is_empty());
+    assert!(per_kind_violations(&report, &[]).is_empty());
 }
 
 /// The per-kind floor must trip on a kind-level regression even when the
@@ -189,7 +197,7 @@ fn per_kind_floor_catches_kind_level_regression() {
         "scenario requires overall F1 ≥ 0.85 (was {:.3})",
         report.overall.score
     );
-    let violations = per_kind_violations(&report);
+    let violations = per_kind_violations(&report, &[]);
     assert!(
         violations.iter().any(|v| v.contains("RestatesCode")),
         "floor must flag the RestatesCode regression; got {violations:?}"

@@ -89,8 +89,16 @@ pub fn classify(comment: &Comment) -> Verdict {
                 })
         })
         .unwrap_or_else(|| {
-            // The context-aware restatement path is primary; the terminal
-            // rule (empty evidence) is retained for zero-overlap filler.
+            // Flow narration is more specific than a bare restatement: a
+            // comment that narrates a loop/iteration already visible in the
+            // code names the construct. The context-aware restatement path is
+            // primary for everything else; the terminal rule (empty evidence)
+            // is retained for zero-overlap filler.
+            if let Some(construct) = flow_narration(comment) {
+                return Verdict::Unnecessary {
+                    reason: UnnecessaryKind::NarratesControlFlow { construct },
+                };
+            }
             Verdict::Unnecessary {
                 reason: UnnecessaryKind::RestatesCode {
                     evidence: restate_evidence(comment),
@@ -228,6 +236,57 @@ pub fn restate_evidence(comment: &Comment) -> RestateEvidence {
     } else {
         RestateEvidence::default()
     }
+}
+
+/// Comment verbs that narrate iteration, mapped to the code constructs that
+/// express the same thing (U5). Both sides must match for the claim to fire:
+/// a verb alone names nothing, a construct alone is silent.
+const FLOW_VERBS: &[(&str, &[&str])] = &[
+    ("loop", &["for", "while", "foreach"]),
+    ("loops", &["for", "while", "foreach"]),
+    ("looping", &["for", "while", "foreach"]),
+    ("iterate", &["for", "while", "foreach", "iter"]),
+    ("iterates", &["for", "while", "foreach", "iter"]),
+    ("iterating", &["for", "while", "foreach", "iter"]),
+    ("iterated", &["for", "while", "foreach", "iter"]),
+];
+
+/// The control-flow construct a comment narrates, if any: a flow verb in the
+/// comment matched against a construct token in the reliable adjacent code.
+/// Word-token matching keeps `format` from satisfying `for`.
+fn flow_narration(comment: &Comment) -> Option<String> {
+    let adjacent = comment
+        .context
+        .as_ref()
+        .filter(|c| !c.unreliable)
+        .and_then(|c| c.adjacent_code.as_ref())?;
+    let comment_tokens = ordered_content_tokens(&comment.text);
+    // Constructs are code keywords (`for`, `while`, `iter`) — matched against
+    // the raw token stream because the stop-word list would strip `for`/`in`
+    // from English-heavy code text.
+    let adjacent_keywords = raw_keyword_tokens(adjacent);
+    for (verb, constructs) in FLOW_VERBS {
+        if !comment_tokens.iter().any(|t| t == verb) {
+            continue;
+        }
+        if let Some(construct) = constructs
+            .iter()
+            .find(|c| adjacent_keywords.iter().any(|t| t.as_str() == **c))
+        {
+            return Some((*construct).to_owned());
+        }
+    }
+    None
+}
+
+/// Whitespace/punctuation-delimited tokens with no stop-word stripping.
+fn raw_keyword_tokens(text: &str) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    text.split(|c: char| !c.is_alphanumeric() && c != '_')
+        .filter(|s| !s.is_empty())
+        .filter(|s| seen.insert((*s).to_owned()))
+        .map(str::to_owned)
+        .collect()
 }
 
 /// The lexical containment of the comment's vocabulary in its adjacent code,

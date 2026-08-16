@@ -125,7 +125,11 @@ pub fn kind_label(kind: &str) -> Label {
     match kind {
         "Shebang" | "LicenseHeader" | "GeneratedFile" | "LinterDirective" | "BddStep"
         | "PublicApiDoc" | "NonObviousIntent" | "Attribution" => Label::Justified,
-        "AgentMemo" | "CommentedOutCode" | "VacuousTodo" | "RestatesCode" => Label::Unnecessary,
+        "AgentMemo"
+        | "CommentedOutCode"
+        | "VacuousTodo"
+        | "NarratesControlFlow"
+        | "RestatesCode" => Label::Unnecessary,
         other => panic!("unknown kind: {other}"),
     }
 }
@@ -157,10 +161,16 @@ pub fn synthesize_source(case: &Case) -> String {
             other => panic!("no docstring snippet for language: {other}"),
         };
     }
-    match case.position {
-        PositionRole::Leading | PositionRole::DocstringHead => format!("{text}\n{code}\n"),
-        PositionRole::Trailing => format!("{code}\n{text}\n"),
-        PositionRole::Inline => format!("{code} {text}\n"),
+    match (case.position, case.scope) {
+        (PositionRole::Leading | PositionRole::DocstringHead, Scope::Function) => {
+            match case.language.as_str() {
+                "python" => format!("def f():\n    {text}\n    {code}\n"),
+                _ => format!("{text}\n{code}\n"),
+            }
+        }
+        (PositionRole::Leading | PositionRole::DocstringHead, _) => format!("{text}\n{code}\n"),
+        (PositionRole::Trailing, _) => format!("{code}\n{text}\n"),
+        (PositionRole::Inline, _) => format!("{code} {text}\n"),
     }
 }
 
@@ -208,6 +218,7 @@ pub fn verdict_kind(verdict: &Verdict) -> &'static str {
             UnnecessaryKind::AgentMemo => "AgentMemo",
             UnnecessaryKind::CommentedOutCode => "CommentedOutCode",
             UnnecessaryKind::VacuousTodo => "VacuousTodo",
+            UnnecessaryKind::NarratesControlFlow { .. } => "NarratesControlFlow",
             UnnecessaryKind::RestatesCode { .. } => "RestatesCode",
         },
     }
@@ -318,10 +329,14 @@ pub fn evaluate(corpus: &[Case], verdicts: &[Verdict]) -> EvalReport {
 /// `MIN_KIND_PRECISION` precision and `MIN_KIND_RECALL` recall, so a weak kind
 /// cannot hide inside the aggregate F1. Returns one violation string per
 /// failing kind.
-pub fn per_kind_violations(report: &EvalReport) -> Vec<String> {
+///
+/// `context_dependent` names kinds whose detection only exists with structural
+/// context (e.g. flow narration); on the text-only path they correctly degrade
+/// to another kind, so their floors are not asserted there.
+pub fn per_kind_violations(report: &EvalReport, context_dependent: &[&str]) -> Vec<String> {
     let mut violations = Vec::new();
     for (kind, m) in &report.by_kind {
-        if m.actual < MIN_BUCKET {
+        if m.actual < MIN_BUCKET || context_dependent.contains(&kind.as_str()) {
             continue;
         }
         let precision =
