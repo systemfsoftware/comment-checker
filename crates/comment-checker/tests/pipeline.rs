@@ -74,6 +74,22 @@ fn edit_fragment_context_is_never_relied_upon() {
 }
 
 #[test]
+fn multi_edit_new_restatement_comment_passes() {
+    // MultiEdit fragments share Edit's unreliable-context rule: a would-be
+    // restatement introduced by an edit is spared, not convicted.
+    let input = r#"{"tool_name":"MultiEdit","tool_input":{"file_path":"foo.py","edits":[{"old_string":"x = 1\n","new_string":"x = 1\n# increment the counter\ncounter += 1\n"}]}}"#;
+    assert!(matches!(check(input, ""), Outcome::Pass { .. }));
+}
+
+#[test]
+fn multi_edit_new_todo_comment_blocks() {
+    // Explicit text-only rules still block on MultiEdit: the unreliable
+    // downgrade only spares the restate fallback, never a real rule match.
+    let input = r#"{"tool_name":"MultiEdit","tool_input":{"file_path":"foo.py","edits":[{"old_string":"x = 1\n","new_string":"x = 1\n# TODO: handle\n"}]}}"#;
+    assert!(matches!(check(input, ""), Outcome::Block { .. }));
+}
+
+#[test]
 fn report_names_the_reason() {
     let input = write("foo.go", "// TODO: refactor later\n");
     let Outcome::Block { report } = check(&input, "") else {

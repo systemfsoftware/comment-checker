@@ -339,7 +339,17 @@ pub fn evaluate(corpus: &[Case], verdicts: &[Verdict]) -> EvalReport {
 pub fn per_kind_violations(report: &EvalReport, context_dependent: &[&str]) -> Vec<String> {
     let mut violations = Vec::new();
     for (kind, m) in &report.by_kind {
-        if m.actual < MIN_BUCKET || context_dependent.contains(&kind.as_str()) {
+        if context_dependent.contains(&kind.as_str()) {
+            continue;
+        }
+        // A 1-case kind cannot hide behind the bucket: recall must be 1.0 or
+        // its vanish from the classifier (wrong kind on its only case) trips.
+        if m.actual == 1 && m.correct == 0 {
+            violations.push(format!(
+                "kind `{kind}` has a single corpus case and never got it right (actual 1, correct 0)"
+            ));
+        }
+        if m.actual < MIN_BUCKET {
             continue;
         }
         let precision = m.precision();

@@ -50,6 +50,22 @@ fn detected_path_reaches_f1_threshold() {
                 .unwrap_or_else(|| panic!("case not detected: [{}] {:?}", case.language, case.text))
         })
         .collect();
+    // The gate must also see the context wiring: at least one restatement
+    // verdict has to carry cited evidence drawn from the detected adjacency,
+    // or a detector that silently drops adjacent_code would alias through.
+    let cited_restates = verdicts
+        .iter()
+        .filter_map(|v| match v {
+            Verdict::Unnecessary {
+                reason: UnnecessaryKind::RestatesCode { evidence },
+            } => (!evidence.is_empty()).then_some(()),
+            _ => None,
+        })
+        .count();
+    assert!(
+        cited_restates >= 1,
+        "no detected-path restatement verdict cited evidence; context wiring is broken"
+    );
     run_gate("detected path", &corpus, &verdicts, &[]);
 }
 

@@ -31,7 +31,7 @@
   {"text": "## Returns the square of x", "code": "def square(x) = x * x", "position": "leading", "scope": "module", "language": "ruby", "comment_type": "line", "kind": "RestatesCode"},
   {"text": "# section: argument parsing helpers", "code": "def parse_args():", "position": "leading", "scope": "module", "language": "python", "comment_type": "line", "kind": "RestatesCode"},
   {"text": "\"\"\"This is a module docstring.\"\"\"", "code": "import os", "position": "docstring-head", "scope": "module", "language": "python", "comment_type": "docstring", "kind": "RestatesCode"},
-  {"text": "\"\"\"Fetch the user.\"\"\"", "code": "def fetch_user(user_id)", "position": "docstring-head", "scope": "function", "language": "python", "comment_type": "docstring", "kind": "RestatesCode"},
+  {"text": "\"\"\"Fetch the user.\"\"\"", "code": "return fetch_user(user_id)", "position": "docstring-head", "scope": "function", "language": "python", "comment_type": "docstring", "kind": "RestatesCode"},
   {"text": "// fmt.Println(\"debug\")", "code": "func main() {}", "position": "leading", "scope": "module", "language": "go", "comment_type": "line", "kind": "CommentedOutCode"},
   {"text": "# print(x)  # debug", "code": "total = 0", "position": "leading", "scope": "module", "language": "python", "comment_type": "line", "kind": "CommentedOutCode"},
   {"text": "// x = x + 1", "code": "var x int", "position": "leading", "scope": "module", "language": "go", "comment_type": "line", "kind": "CommentedOutCode"},
@@ -55,6 +55,7 @@
   {"text": "# increments the counter", "code": "counter += 1", "position": "inline", "scope": "module", "language": "python", "comment_type": "line", "kind": "RestatesCode"},
   {"text": "# throttle to avoid the rate limit", "code": "sleep(delay)", "position": "leading", "scope": "module", "language": "python", "comment_type": "line", "kind": "NonObviousIntent"},
   {"text": "# Returns: the user", "code": "def user(id); end", "position": "leading", "scope": "module", "language": "ruby", "comment_type": "line", "kind": "PublicApiDoc"},
+  {"text": "# loop the result", "code": "print(\"for the win\")", "position": "leading", "scope": "module", "language": "python", "comment_type": "line", "kind": "RestatesCode"},
   {"text": "# loop over each item", "code": "for item in items: dispatch(item)", "position": "leading", "scope": "function", "language": "python", "comment_type": "line", "kind": "NarratesControlFlow"},
   {"text": "# iterate the results", "code": "for result in results: emit(result)", "position": "leading", "scope": "function", "language": "python", "comment_type": "line", "kind": "NarratesControlFlow"},
   {"text": "# retry the loop to avoid the rate limit", "code": "for attempt in attempts: send(request)", "position": "leading", "scope": "function", "language": "python", "comment_type": "line", "kind": "NonObviousIntent"}

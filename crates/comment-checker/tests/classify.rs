@@ -909,6 +909,27 @@ fn restate_evidence_needs_containment_not_any_overlap() {
     );
 }
 
+#[test]
+fn restate_containment_band_just_below_half_stays_empty() {
+    // Two of five shared tokens (0.4) must NOT fire: the boundary pins the
+    // RESTATE_CONTAINMENT band (0.34, 0.5) so lowering the threshold to 0.4
+    // changes a real outcome instead of silently passing.
+    use claude_code_comment_checker::classify::classify;
+    use claude_code_comment_checker::{UnnecessaryKind, Verdict};
+    let comment = context_comment(
+        "// alpha beta gamma delta epsilon",
+        "let alpha = 1; beta(b);",
+    );
+    let classify = classify(&comment);
+    let Verdict::Unnecessary {
+        reason: UnnecessaryKind::RestatesCode { evidence },
+    } = &classify
+    else {
+        panic!("expected RestatesCode, got {classify:?}");
+    };
+    assert!(evidence.is_empty());
+}
+
 // U5 — flow narration: a comment that restates a loop/iteration construct.
 
 #[test]
@@ -1023,6 +1044,24 @@ fn flow_narration_cites_the_exact_verb() {
 }
 
 #[test]
+fn flow_narration_masking_covers_the_whole_payload() {
+    // A payload that starts far inside the quote must be masked in full: the
+    // mutants that blank only the character after the opening quote leave
+    // `for` of "real for" intact and would fire a phantom construct.
+    use claude_code_comment_checker::classify::classify;
+    use claude_code_comment_checker::{UnnecessaryKind, Verdict};
+    let comment = context_comment("// loop it", "f(\"real for\")");
+    let classify = classify(&comment);
+    let Verdict::Unnecessary {
+        reason: UnnecessaryKind::RestatesCode { evidence },
+    } = &classify
+    else {
+        panic!("expected RestatesCode, got {classify:?}");
+    };
+    assert!(evidence.is_empty());
+}
+
+#[test]
 fn flow_narration_verb_row_must_match_the_code_construct() {
     // `looping` maps to `for`/`while` constructs only — `iter` belongs to the
     // `iterate` family. A mutated continue/equality would let `looping` pick
@@ -1038,6 +1077,52 @@ fn flow_narration_verb_row_must_match_the_code_construct() {
             },
         }
     );
+}
+
+#[test]
+fn flow_narration_constructs_survive_masking_after_the_quote() {
+    // The masker must close quotes, not swallow the whole remainder: after
+    // two string literals, the `for` keyword sits in real code and the flow
+    // verb must match it (kills the mutants that never close a quote).
+    use claude_code_comment_checker::UnnecessaryKind;
+    use claude_code_comment_checker::classify::classify;
+    let comment = context_comment("// loop it", "f(\"x\" + \"y\") for i in range(3)");
+    let classify = classify(&comment);
+    let Verdict::Unnecessary {
+        reason: UnnecessaryKind::NarratesControlFlow { verb, construct },
+    } = &classify
+    else {
+        panic!("expected NarratesControlFlow, got {classify:?}");
+    };
+    assert_eq!(*verb, "loop");
+    assert_eq!(*construct, "for");
+}
+
+#[test]
+fn flow_narration_ignores_construct_words_inside_string_literals() {
+    // `print("for the win")` contains the letters of `for` but no construct:
+    // string-literal payloads must be masked before keyword extraction, or a
+    // categorically wrong citation ruins the report.
+    use claude_code_comment_checker::classify::classify;
+    use claude_code_comment_checker::{UnnecessaryKind, Verdict};
+    let comment = context_comment("// loop the result", "print(\"for the win\")");
+    let classify = classify(&comment);
+    assert!(
+        !matches!(
+            classify,
+            Verdict::Unnecessary {
+                reason: UnnecessaryKind::NarratesControlFlow { .. }
+            }
+        ),
+        "string-literal construct must not fire: {classify:?}"
+    );
+    let Verdict::Unnecessary {
+        reason: UnnecessaryKind::RestatesCode { evidence },
+    } = classify
+    else {
+        panic!("expected RestatesCode");
+    };
+    assert!(evidence.is_empty());
 }
 
 #[test]

@@ -1,7 +1,11 @@
 //! The pure classification core: one comment in, one verdict out.
 //!
-//! No I/O, no clock, no randomness, no branches — the decision is a fold over
-//! ordered rule tables (CONST-P1, CONST-P2).
+//! No I/O, no clock, no randomness. The decision starts as a fold over
+//! ordered rule tables (JUSTIFIED then UNNECESSARY); anything unmatched
+//! falls through to the context-aware detectors — flow narration, then
+//! restatement-with-evidence — and finally the terminal text-only rule.
+//! A comment whose structural context is unreliable (Edit/MultiEdit
+//! fragment) is never convicted on the catch-all path.
 
 use crate::comment::{
     Comment, CommentType, Justification, PositionRole, RestateEvidence, UnnecessaryKind, Verdict,
@@ -305,13 +309,36 @@ fn flow_construct(
         .find(|(verb, _)| comment_tokens.iter().any(|t| t == verb))?;
     // Constructs are code keywords (`for`, `while`, `iter`) — matched against
     // the raw token stream because the stop-word list would strip `for`/`in`
-    // from English-heavy code text. The adjacent code is only tokenized once
-    // a flow verb is present in the comment.
-    let adjacent_keywords = raw_keyword_tokens(adjacent);
+    // from English-heavy code text. String-literal payloads are masked first
+    // so `print("for the win")` cannot cite a construct that isn't there. The
+    // adjacent code is only tokenized once a flow verb is present.
+    let adjacent_keywords = raw_keyword_tokens(&mask_literals(adjacent));
     let construct = constructs
         .iter()
         .find(|c| adjacent_keywords.iter().any(|t| t.as_str() == **c))?;
     Some((verb, *construct))
+}
+
+/// Blank out the payloads of `"..."` and `'...'` string literals so keyword
+/// extraction cannot mistake literal content for code constructs.
+fn mask_literals(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut quote = None;
+    for ch in text.chars() {
+        match quote {
+            Some(q) if ch == q => {
+                quote = None;
+                out.push(' ');
+            }
+            Some(_) => out.push(' '),
+            None if ch == '"' || ch == '\'' => {
+                quote = Some(ch);
+                out.push(' ');
+            }
+            None => out.push(ch),
+        }
+    }
+    out
 }
 
 /// Tokenize `text` on anything that is not alphanumeric or an underscore.
@@ -499,7 +526,7 @@ fn is_non_obvious_intent(text: &str, _comment: &Comment) -> bool {
 }
 
 fn is_attribution(text: &str, _comment: &Comment) -> bool {
-    any_contains(text, ATTRIBUTION_MARKERS)
+    any_contains(text, ATTRIBUTION_MARKERS) || any_starts_after_strip(text, ATTRIBUTION_PREFIXES)
 }
 
 fn is_agent_memo(text: &str, _comment: &Comment) -> bool {
@@ -678,9 +705,12 @@ const ATTRIBUTION_MARKERS: &[&str] = &[
     "credit",
     "@see",
     "@link",
-    "ref:",
-    "source:",
 ];
+
+/// Attribution tags that only count at the start of the comment (after the
+/// marker), so prose that merely mentions `ref:`/`source:` mid-sentence is
+/// not read as provenance.
+const ATTRIBUTION_PREFIXES: &[&str] = &["ref:", "source:"];
 
 const AGENT_MEMO_PREFIXES: &[&str] = &[
     "changed",
