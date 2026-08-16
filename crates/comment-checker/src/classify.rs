@@ -333,24 +333,31 @@ fn is_bdd(text: &str, _comment: &Comment) -> bool {
 }
 
 /// A docstring documents a public contract when it carries contract markup
-/// (`@param`, `Args:`, `Returns:`, …).
+/// (`@param`, `Args:`, `Returns:`, …); a line or block comment does the same
+/// when contract markup *leads* the comment at a contract position (U4).
 ///
 /// Structural context can only *narrow* that judgement, never widen it — the
 /// corpus treats a bare summary line (`"""Fetch the user."""`) as a
 /// restatement, so position alone must not justify a comment. When context is
-/// available the markup must additionally be positioned as a contract (U4):
-/// attached to a declaration, not trailing a statement; and it must not merely
-/// echo the declaration it documents (U3).
+/// available the markup must additionally be positioned as a contract:
+/// attached to a declaration, not trailing a statement; and a docstring must
+/// not merely echo the declaration it documents (U3). A line/block comment
+/// whose lone job is the contract tag (`# Returns: …`) is not revoked for
+/// echoing — the tag is the contract.
 fn is_public_api_doc(text: &str, comment: &Comment) -> bool {
-    if comment.comment_type != CommentType::Docstring {
+    let markup = match comment.comment_type {
+        CommentType::Docstring => any_contains(text, DOC_MARKUP),
+        // Non-docstrings need the markup at the start, so prose that happens
+        // to mention `@param` mid-sentence is never promoted to a contract.
+        CommentType::Line | CommentType::Block => leads_with_contract_markup(text),
+    };
+    if !markup {
         return false;
     }
-    if !any_contains(text, DOC_MARKUP) {
-        return false;
-    }
-    let Some(ctx) = comment.context.as_ref() else {
-        // Text-only path: markup is the whole signal.
-        return true;
+    // Text-only / unreliable path: only docstrings are promoted by markup
+    // alone; a line comment without trustworthy position documents nothing.
+    let Some(ctx) = comment.context.as_ref().filter(|c| !c.unreliable) else {
+        return comment.comment_type == CommentType::Docstring;
     };
     let positioned_as_contract = match ctx.position {
         // Python-style: the docstring lives at the head of the body it documents.
@@ -360,7 +367,57 @@ fn is_public_api_doc(text: &str, comment: &Comment) -> bool {
         // A doc-shaped comment after or beside code documents nothing.
         PositionRole::Trailing | PositionRole::Inline => false,
     };
-    positioned_as_contract && !restates_adjacent(comment)
+    if !positioned_as_contract {
+        return false;
+    }
+    match comment.comment_type {
+        CommentType::Docstring => !restates_adjacent(comment),
+        CommentType::Line | CommentType::Block => true,
+    }
+}
+
+/// Contract markup that must *lead* a non-docstring comment (after its marker
+/// and margin) for it to be read as interface documentation. Attribution-only
+/// tags (`@author`, `@see`, `ref:`, …) are excluded — they justify via their
+/// own rule and must not masquerade as contracts.
+const CONTRACT_LEAD_MARKUP: &[&str] = &[
+    "@param",
+    "@returns",
+    "@return",
+    "@throws",
+    "@raises",
+    "@exception",
+    "@example",
+    "@deprecated",
+    "@since",
+    "@type",
+    "@typedef",
+    "@property",
+    "# examples",
+    "# panics",
+    "# errors",
+    "# safety",
+    ":param",
+    ":return:",
+    ":rtype:",
+    ":raises:",
+    ":type",
+    "args:",
+    "returns:",
+    "raises:",
+    "yields:",
+    "attributes:",
+    "@brief",
+    "@details",
+    "@note",
+    "@warning",
+];
+
+/// True when the first content of the comment (after stripping the marker) is
+/// a contract tag.
+fn leads_with_contract_markup(text: &str) -> bool {
+    let s = stripped_after_marker(text);
+    CONTRACT_LEAD_MARKUP.iter().any(|m| s.starts_with(m))
 }
 
 fn is_non_obvious_intent(text: &str, _comment: &Comment) -> bool {

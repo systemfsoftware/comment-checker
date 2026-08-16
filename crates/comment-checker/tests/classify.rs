@@ -336,20 +336,73 @@ fn trailing_docstring_with_markup_is_not_a_public_contract() {
 }
 
 #[test]
-fn line_comment_in_head_slot_is_not_a_public_contract() {
-    // `DocstringHead` is positional: a `#` line comment first in a file
-    // occupies the slot. The comment_type gate is what stops it being read as
-    // documentation.
+fn line_comment_with_lead_contract_markup_is_a_public_contract() {
+    // U4: contract markup leading a line comment at a contract position is
+    // interface documentation — the tag is the contract, whatever the comment
+    // syntax. `DocstringHead` is still positional: what changed is that
+    // markup-at-start now certifies a *line* comment, where the old rule
+    // required the Docstring type.
     use claude_code_comment_checker::classify::classify;
     use claude_code_comment_checker::{
         CommentContext, CommentType, Justification, PositionRole, Scope, Verdict,
     };
-    let mut comment = Comment::new("@param a first addend", 1, CommentType::Line);
+    let mut comment = Comment::new("Returns: the user", 1, CommentType::Line);
     comment.context = Some(CommentContext {
-        adjacent_code: Some("pub fn add(a: i32, b: i32) -> i32".into()),
+        adjacent_code: Some("pub fn user() -> User".into()),
         annotates_declaration: true,
         scope: Scope::Module,
         position: PositionRole::DocstringHead,
+        unreliable: false,
+    });
+    assert_eq!(
+        classify(&comment),
+        Verdict::Justified {
+            reason: Justification::PublicApiDoc,
+        }
+    );
+}
+
+#[test]
+fn line_contract_markup_mid_sentence_is_not_justified() {
+    // A prose comment mentioning `@param` mid-sentence is not over-justified:
+    // the markup must lead the comment to count as a contract.
+    use claude_code_comment_checker::classify::classify;
+    use claude_code_comment_checker::{
+        CommentContext, CommentType, Justification, PositionRole, Scope, Verdict,
+    };
+    let mut comment = Comment::new(
+        "use @param only when the code is ambiguous",
+        1,
+        CommentType::Line,
+    );
+    comment.context = Some(CommentContext {
+        adjacent_code: Some("pub fn add(a: i32, b: i32) -> i32".into()),
+        annotates_declaration: true,
+        scope: Scope::Function,
+        position: PositionRole::Leading,
+        unreliable: false,
+    });
+    assert_ne!(
+        classify(&comment),
+        Verdict::Justified {
+            reason: Justification::PublicApiDoc,
+        }
+    );
+}
+
+#[test]
+fn line_contract_markup_beside_a_statement_is_not_justified() {
+    // A tag trailing a statement or inline with it documents nothing.
+    use claude_code_comment_checker::classify::classify;
+    use claude_code_comment_checker::{
+        CommentContext, CommentType, Justification, PositionRole, Scope, Verdict,
+    };
+    let mut comment = Comment::new("Returns: the user", 1, CommentType::Line);
+    comment.context = Some(CommentContext {
+        adjacent_code: Some("total = 0".into()),
+        annotates_declaration: false,
+        scope: Scope::Module,
+        position: PositionRole::Trailing,
         unreliable: false,
     });
     assert_ne!(
