@@ -5,7 +5,7 @@
   },
   "tasks": {
     "manifest:generate": "deno run --allow-read=release/targets.json,../npm/packages/comment-checker/package.json release/generate-platform-manifest.ts",
-    "manifest:sync-root": "deno run --allow-read=release/targets.json,../npm/packages/comment-checker/package.json --allow-write=../npm/packages/comment-checker/package.json release/sync-root-version.ts",
+    "manifest:sync-root": "deno run --allow-env --allow-read=release/targets.json,../npm/packages/comment-checker/package.json --allow-write=../npm/packages/comment-checker/package.json release/sync-root-version.ts",
     "check-matrix": "deno run --allow-read=release/targets.json,../npm/packages/comment-checker/package.json,../.github/workflows/release.yml release/check-matrix.ts",
     "test": "deno test --allow-read --allow-write --allow-env --allow-run=deno ../tests/release",
     "lint": "deno lint --config ./deno.jsonc . ../tests/release"

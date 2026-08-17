@@ -2,7 +2,7 @@
 // `pnpm -r build`: the launcher entry and the extracted platform module are
 // imported from the built dist/ output below.
 import { spawnSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -14,6 +14,15 @@ import { binaryFileName, optionalDepName } from "../../npm/packages/comment-chec
 const launcherPath = fileURLToPath(
   new URL("../../npm/packages/comment-checker/dist/index.mjs", import.meta.url)
 )
+
+// The published `bin` contract is the shebang + exec bit on dist/index.mjs;
+// without them npm's POSIX bin shim fails with ENOEXEC for every consumer.
+test("built launcher carries the node shebang and is executable", () => {
+  const head = readFileSync(launcherPath, "utf8").split("\n", 1)[0]
+  assert.equal(head, "#!/usr/bin/env node")
+  const { mode } = statSync(launcherPath)
+  assert.notEqual(mode & 0o111, 0, "dist/index.mjs must be executable")
+})
 
 const hostDep = optionalDepName(process.platform, process.arch)
 const skipNoPosixShim =

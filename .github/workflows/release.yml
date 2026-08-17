@@ -41,7 +41,7 @@ jobs:
             runner: ubuntu-latest
           - target: aarch64-unknown-linux-gnu
             suffix: linux-arm64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04-arm
           - target: x86_64-apple-darwin
             suffix: darwin-x64
             runner: macos-13
@@ -73,7 +73,9 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Linux arm64 cross-linker
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        # Only needed when building aarch64 from an x64 runner. The native
+        # ubuntu-24.04-arm runner builds aarch64 without a cross toolchain.
+        if: matrix.target == 'aarch64-unknown-linux-gnu' && matrix.runner == 'ubuntu-latest'
         shell: bash
         run: |
           sudo apt-get update
@@ -135,11 +137,20 @@ jobs:
       - name: Stage platform package (outside workspace) + record binarySha256
         shell: bash
         run: |
+          # Portable sha256: sha256sum (Linux/Windows Git Bash), else shasum
+          # (macOS). Must agree with the cross-check step's digest.
+          sha256_of() {
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum "$1" | cut -d' ' -f1
+            else
+              shasum -a 256 "$1" | cut -d' ' -f1
+            fi
+          }
           STAGE="$RUNNER_TEMP/platform-${{ matrix.suffix }}"
           mkdir -p "$STAGE"
           BIN="target/${{ matrix.target }}/release/${BINARY_NAME}"
           cp "$BIN" "$STAGE/${BINARY_NAME}"
-          SHA="$(shasum -a 256 "$STAGE/${BINARY_NAME}" | cut -d' ' -f1)"
+          SHA="$(sha256_of "$STAGE/${BINARY_NAME}")"
           deno run \
             --allow-read=scripts/release/targets.json,npm/packages/comment-checker/package.json \
             --allow-write="$STAGE" \
@@ -227,6 +238,12 @@ jobs:
       - name: "Gate: every platform package published with table os/cpu/libc"
         shell: bash
         run: |
+          # Shape-normalize BOTH sides: npm view reports libc as an array
+          # ("libc":["glibc"]) while the table stores a bare string, and
+          # darwin/win32 rows have no libc at all. Comparing through the same
+          # normalization (libc as array, absent when null) makes the deep
+          # equality meaningful instead of always-true or always-false.
+          libc_norm='{os, cpu} + (if (.libc // null) != null then {libc} else {} end)'
           SUFFIXES="$(jq -r '.[].suffix' scripts/release/targets.json)"
           test -n "$SUFFIXES" || { echo "targets.json empty" >&2; exit 1; }
           for SUFFIX in $SUFFIXES; do
@@ -235,8 +252,9 @@ jobs:
               echo "platform package $PKG@$VERSION missing" >&2
               exit 1
             }
-            EXPECTED="$(jq -c --arg suffix "$SUFFIX" '.[] | select(.suffix == $suffix) | {os: [.os], cpu: [.cpu], libc: (.libc // null)}' scripts/release/targets.json)"
-            echo "$META" | jq -e -c --arg v "$VERSION" '.version == $v and ({os, cpu, libc} == ($expect | fromjson))' --argjson expect "$EXPECTED" >/dev/null || {
+            EXPECTED="$(jq -c --arg suffix "$SUFFIX" '.[] | select(.suffix == $suffix) | {os: [.os], cpu: [.cpu]} + (if (.libc // null) != null then {libc: [.libc]} else {} end)' scripts/release/targets.json)"
+            echo "$META" | jq -e -c --arg v "$VERSION" --argjson want "$EXPECTED" \
+              '.version == $v and ('"$libc_norm"') == $want' >/dev/null || {
               echo "$PKG@$VERSION mismatch: $(echo "$META" | jq -c '{version, os, cpu, libc}') want $EXPECTED" >&2
               exit 1
             }
@@ -246,17 +264,40 @@ jobs:
       - name: Cross-check published tarballs vs recorded binary sha
         shell: bash
         run: |
+          # npm registry read-after-write is eventually consistent: the
+          # platform publish finished only seconds ago, so a first `npm pack`
+          # may still 404. Retry a bounded number of times before failing.
+          sha256_of() {
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum "$1" | cut -d' ' -f1
+            else
+              shasum -a 256 "$1" | cut -d' ' -f1
+            fi
+          }
           SUFFIXES="$(jq -r '.[].suffix' scripts/release/targets.json)"
           test -n "$SUFFIXES" || { echo "targets.json empty" >&2; exit 1; }
           for SUFFIX in $SUFFIXES; do
             SHA_RECORDED="$(cat "sidecars/binary-${SUFFIX}.sha256")"
             PKG="@systemfsoftware/claude-code-comment-checker-${SUFFIX}"
-            TARBALL="$(npm pack "$PKG@${VERSION}" --pack-destination "$RUNNER_TEMP" 2>/dev/null | tail -1)"
+            TARBALL=""
+            for attempt in 1 2 3 4 5; do
+              TARBALL="$(npm pack "$PKG@${VERSION}" --pack-destination "$RUNNER_TEMP" 2>/dev/null | tail -1)"
+              if [ -n "$TARBALL" ] && [ -f "$RUNNER_TEMP/$TARBALL" ]; then
+                break
+              fi
+              echo "npm pack $PKG@$VERSION attempt $attempt/5 failed; retrying" >&2
+              TARBALL=""
+              sleep 5
+            done
+            if [ -z "$TARBALL" ]; then
+              echo "$PKG@$VERSION not retrievable from registry after 5 attempts" >&2
+              exit 1
+            fi
             rm -rf "$RUNNER_TEMP/unpack"
             mkdir -p "$RUNNER_TEMP/unpack"
             tar -xzf "$RUNNER_TEMP/$TARBALL" -C "$RUNNER_TEMP/unpack"
             BIN="$(find "$RUNNER_TEMP/unpack" -type f \( -name 'comment-checker' -o -name 'comment-checker.exe' \) | head -1)"
-            SHA_PUBLISHED="$(sha256sum "$BIN" | cut -d' ' -f1)"
+            SHA_PUBLISHED="$(sha256_of "$BIN")"
             if [ "$SHA_RECORDED" != "$SHA_PUBLISHED" ]; then
               echo "binary sha mismatch for $SUFFIX: recorded $SHA_RECORDED, got $SHA_PUBLISHED" >&2
               exit 1
@@ -272,7 +313,11 @@ jobs:
       - name: Sync root version + optionalDependencies from tag
         shell: bash
         run: |
+          # --allow-env required: VERSION arrives via the environment (KTD5:
+          # the git tag is the single version source). The deno.jsonc
+          # manifest:sync-root task declares the identical permission set.
           VERSION="$VERSION" deno run \
+            --allow-env \
             --allow-read=scripts/release/targets.json,npm/packages/comment-checker/package.json \
             --allow-write=npm/packages/comment-checker/package.json \
             scripts/release/sync-root-version.ts

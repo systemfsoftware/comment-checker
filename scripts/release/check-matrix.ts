@@ -17,13 +17,15 @@ const fail = (reason: string) => failures.push(reason)
 const note = (message: string) => console.error(`check-matrix: note: ${message}`)
 
 const flags = parseFlags(Deno.args, {
-  string: ['targets', 'manifest-path'],
-  rename: { 'manifest-path': 'manifestPath' },
+  string: ['targets', 'manifest-path', 'workflow-path'],
+  rename: { 'manifest-path': 'manifestPath', 'workflow-path': 'workflowPath' },
 })
 const targetsArg = flags.targets
 const manifestArg = flags.manifestPath
+const workflowArg = flags.workflowPath
 const targetsPath = typeof targetsArg === 'string' ? resolve(targetsArg) : DEFAULT_TARGETS_PATH
 const manifestPath = typeof manifestArg === 'string' ? resolve(manifestArg) : MANIFEST_PATH
+const workflowPath = typeof workflowArg === 'string' ? resolve(workflowArg) : RELEASE_WORKFLOW_PATH
 
 let targets: Array<
   { target: string; suffix: string; os: string; cpu: string; libc?: string; bin: string }
@@ -136,28 +138,45 @@ if (declaredNames.length === 0) {
 //    name exactly the triples in the table, and vice versa. Absent workflow is
 //    a skip (with a note), not a failure.
 try {
-  await Deno.lstat(RELEASE_WORKFLOW_PATH)
-  const content = await Deno.readTextFile(RELEASE_WORKFLOW_PATH)
-  // Only literal matrix include rows (target: <triple>) — env-var names like
-  // CC_aarch64_unknown_linux_gnu or gcc-aarch64-linux-gnu are not rows.
-  const workflowTargets = new Set(
-    [...content.matchAll(/^\s*-\s*target:\s*((?:x86_64|aarch64)-[a-z0-9-]+)\s*$/gm)].map((m) =>
-      m[1]
-    ),
+  await Deno.lstat(workflowPath)
+  const content = await Deno.readTextFile(workflowPath)
+  // Rows carry their suffix one line below the target (matrix:include order);
+  // capture target->suffix pairs from the workflow.
+  const workflowPairs = new Map(
+    [...content.matchAll(
+      /^\s*-\s*target:\s*((?:x86_64|aarch64)-[a-z0-9-]+)\s*\n\s*suffix:\s*([a-z0-9-]+)\s*$/gm,
+    )].map((m) => [m[1], m[2]]),
   )
-  const tableTargets = new Set(targets.map((t) => t.target))
-  for (const target of tableTargets) {
-    if (!workflowTargets.has(target)) {
+  const tablePairs = new Map(targets.map((t) => [t.target, t.suffix]))
+  for (const [target, suffix] of tablePairs) {
+    if (!workflowPairs.has(target)) {
       fail(`release.yml does not list release target ${target}`)
+    } else if (workflowPairs.get(target) !== suffix) {
+      fail(
+        `release.yml lists ${target} with suffix ${workflowPairs.get(target)}, ` +
+          `table says ${suffix}`,
+      )
     }
   }
-  for (const target of workflowTargets) {
-    if (!tableTargets.has(target)) {
+  for (const [target, suffix] of workflowPairs) {
+    if (!tablePairs.has(target)) {
       fail(`release.yml lists ${target}, which is not a row in targets.json`)
+    } else if (suffix !== tablePairs.get(target)) {
+      fail(
+        `release.yml lists ${target} with suffix ${suffix}, table says ${
+          tablePairs.get(
+            target,
+          )
+        }`,
+      )
     }
   }
-} catch {
-  note(`skipped: ${RELEASE_WORKFLOW_PATH} not found (workflow agreement not checked)`)
+} catch (error) {
+  if (error instanceof Deno.errors.NotFound) {
+    note(`skipped: ${workflowPath} not found (workflow agreement not checked)`)
+  } else {
+    fail(`cannot check workflow ${workflowPath}: ${String(error)}`)
+  }
 }
 
 if (failures.length > 0) {

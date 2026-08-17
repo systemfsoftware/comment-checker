@@ -1,6 +1,7 @@
 import { join } from '@std/path'
 import {
   assertEquals,
+  assertFalse,
   assertMatch,
   assertNotEquals,
   assertObjectMatch,
@@ -57,7 +58,7 @@ function runScript(
       i++
     } else if (
       args[i] === '--out' || args[i] === '--manifest-path' ||
-      args[i] === '--targets'
+      args[i] === '--targets' || args[i] === '--workflow-path'
     ) {
       callerPaths.push(args[++i])
     }
@@ -132,7 +133,11 @@ Deno.test('generate-platform-manifest emits the correct package.json for each ta
       assertEquals(pkg.os, [entry.os])
       assertEquals(pkg.cpu, [entry.cpu])
       assertEquals(pkg.files, [entry.bin])
-      assertEquals(pkg.bin, { 'comment-checker': `./${entry.bin}` })
+      assertEquals(
+        pkg.bin,
+        undefined,
+        'platform packages must not declare a bin (would collide with the launcher shim)',
+      )
       assertEquals(pkg.publishConfig, { access: 'public', provenance: true })
       if (entry.libc !== undefined) {
         assertEquals(pkg.libc, [entry.libc])
@@ -425,4 +430,143 @@ Deno.test('check-matrix: fails on a missing or extra table target', async () => 
     assertNotEquals(resExtra.code, 0)
     assertMatch(decode(resExtra.stderr), /FAIL/)
   })
+})
+
+// --- Workflow-agreement failure arms (F9): every gate fails loudly; a green
+// check-matrix must imply table <-> workflow agreement in BOTH directions,
+// including target/suffix pairing (a swapped suffix must not pass).
+
+const WORKFLOW_ROW = (target: string, suffix: string) =>
+  `        - target: ${target}\n          suffix: ${suffix}\n`
+
+Deno.test('check-matrix: fails when the workflow omits a table target', async () => {
+  await withTmp(async (tmp) => {
+    const wf = join(tmp, 'release-missing.yml')
+    const table = await readTable()
+    const kept = table.filter((t) => t.target !== 'x86_64-apple-darwin')
+    await Deno.writeTextFile(
+      wf,
+      '  strategy:\n    matrix:\n      include:\n' +
+        kept.map((t) => WORKFLOW_ROW(t.target, t.suffix)).join('') +
+        '\n',
+    )
+    const res = await runScript('check-matrix.ts', ['--workflow-path', wf])
+    assertNotEquals(res.code, 0)
+    assertMatch(decode(res.stderr), /FAIL/)
+    assertMatch(decode(res.stderr), /x86_64-apple-darwin/)
+  })
+})
+
+Deno.test('check-matrix: fails when the workflow names an extra target', async () => {
+  await withTmp(async (tmp) => {
+    const wf = join(tmp, 'release-extra.yml')
+    const table = await readTable()
+    await Deno.writeTextFile(
+      wf,
+      '  strategy:\n    matrix:\n      include:\n' +
+        table.map((t) => WORKFLOW_ROW(t.target, t.suffix)).join('') +
+        WORKFLOW_ROW('x86_64-unknown-freebsd', 'freebsd-x64') +
+        '\n',
+    )
+    const res = await runScript('check-matrix.ts', ['--workflow-path', wf])
+    assertNotEquals(res.code, 0)
+    assertMatch(decode(res.stderr), /FAIL/)
+    assertMatch(decode(res.stderr), /x86_64-unknown-freebsd/)
+  })
+})
+
+Deno.test('check-matrix: fails on a swapped target/suffix pair', async () => {
+  await withTmp(async (tmp) => {
+    const wf = join(tmp, 'release-swapped.yml')
+    const table = await readTable()
+    const rows = table.map((t) => [
+      t.target,
+      t.target === 'x86_64-unknown-linux-gnu' ? 'linux-arm64' : t.suffix,
+    ])
+    await Deno.writeTextFile(
+      wf,
+      '  strategy:\n    matrix:\n      include:\n' +
+        rows.map(([t, s]) => WORKFLOW_ROW(t, s)).join('') +
+        '\n',
+    )
+    const res = await runScript('check-matrix.ts', ['--workflow-path', wf])
+    assertNotEquals(res.code, 0)
+    assertMatch(decode(res.stderr), /FAIL/)
+  })
+})
+
+// --- parseFlags error paths (F10): malformed CLIs must exit non-zero before
+// any write, never silently coerce a flag into a value slot. ---
+const BAD_ARGS: Array<[string, string[], RegExp]> = [
+  ['missing value', ['--suffix'], /missing value for --suffix/],
+  [
+    'flag-shaped value',
+    ['--suffix', '--dry-run'],
+    /missing value for --suffix/,
+  ],
+  ['unknown flag', ['--nope'], /unknown argument: --nope/],
+  ['positional argument', ['naked'], /unknown argument: naked/],
+]
+
+for (const [label, args, pattern] of BAD_ARGS) {
+  Deno.test(`parseFlags: ${label} exits non-zero without writing`, async () => {
+    await withTmp(async (tmp) => {
+      const res = await runScript('generate-platform-manifest.ts', [
+        ...args,
+        '--version',
+        '0.1.0',
+        '--out',
+        tmp,
+      ])
+      assertNotEquals(res.code, 0)
+      assertMatch(decode(res.stderr), pattern)
+      // No package.json may be produced by a failed parse.
+      await assertRejects(() => Deno.lstat(join(tmp, 'package.json')))
+    })
+  })
+}
+
+Deno.test('parseFlags: --flag=value form still admits dash-leading values', async () => {
+  await withTmp(async (tmp) => {
+    const out = join(tmp, 'eq-form')
+    const res = await runScript('generate-platform-manifest.ts', [
+      '--suffix=linux-x64',
+      '--version=0.1.0',
+      '--out',
+      out,
+    ], { writeAllow: out })
+    assertEquals(res.code, 0, decode(res.stderr))
+    const pkg = JSON.parse(
+      await Deno.readTextFile(join(out, 'package.json')),
+    )
+    assertEquals(pkg.name, `${LAUNCHER_PREFIX}-linux-x64`)
+  })
+})
+
+// --- Workflow/deno-task fidelity (F7): the exact permission surface the
+// release pipeline declares must keep matching the scripts' real needs.
+// These assertions replay the declared flags from the committed files — any
+// drift (e.g. an env read without --allow-env) fails here, not at a tag. ---
+Deno.test('fidelity: release.yml sync-root step declares --allow-env', async () => {
+  const workflow = await Deno.readTextFile(RELEASE_WORKFLOW_PATH)
+  const syncBlock =
+    /- name: Sync root version[^]*?deno run[^\n]*\n((?:.*?\n)*?)\s*scripts\/release\/sync-root-version\.ts/
+  const match = syncBlock.exec(workflow)
+  assertNotEquals(match, null, 'sync-root step not found')
+  assertMatch(match![1], /--allow-env/)
+})
+
+Deno.test('fidelity: manifest:sync-root task declares --allow-env', async () => {
+  const config = await Deno.readTextFile(
+    join(import.meta.dirname!, '..', '..', 'scripts', 'deno.jsonc'),
+  )
+  assertMatch(config, /"manifest:sync-root":[^\n]*--allow-env/)
+})
+
+Deno.test('fidelity: registry gate never regresses to the fromjson bug', async () => {
+  const workflow = await Deno.readTextFile(RELEASE_WORKFLOW_PATH)
+  assertFalse(
+    workflow.includes('fromjson'),
+    'jq gate must compare --argjson objects directly',
+  )
 })

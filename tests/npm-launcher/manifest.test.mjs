@@ -21,7 +21,7 @@ test("launcher manifest ships only the built launcher", () => {
 test("committed manifest carries no optionalDependencies (pre-publish)", () => {
   // pnpm cannot record unresolvable optional deps in a lockfile, so the
   // committed manifest must not name the unpublished platform packages;
-  // sync-root-version.ts injects the platforms.json pins at publish time.
+  // sync-root-version.ts injects the targets.json pins at publish time.
   assert.equal(manifest.optionalDependencies, undefined)
   assert.equal(manifest.version, "0.1.0")
 })

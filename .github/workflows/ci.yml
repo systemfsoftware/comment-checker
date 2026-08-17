@@ -33,6 +33,40 @@ jobs:
       - name: Test (unit + property + composition + F1)
         run: cargo test --all-targets
 
+  npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: denoland/setup-deno@v2
+
+      - name: Install JS deps (frozen)
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build + typecheck (launcher)
+        run: pnpm -r build && pnpm -r typecheck
+
+      - name: Launcher black-box suite (node)
+        run: node --test "tests/npm-launcher/*.test.mjs"
+
+      - name: Release scripts suite + matrix agreement gate (deno)
+        run: |
+          cd scripts
+          deno task lint
+          deno task test
+          deno task check-matrix
+
   mutation:
     runs-on: ubuntu-latest
     steps:

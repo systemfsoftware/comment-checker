@@ -57,7 +57,9 @@ const pkg: Record<string, unknown> = {
   os: [entry.os],
   cpu: [entry.cpu],
   files: [entry.bin],
-  bin: { 'comment-checker': `./${entry.bin}` },
+  // No `bin` field on platform packages (esbuild precedent): installing one
+  // would create a top-level `comment-checker` shim that collides with the
+  // launcher's own bin of the same name.
   publishConfig: { access: 'public', provenance: true },
 }
 if (entry.libc !== undefined) {

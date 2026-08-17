@@ -33,12 +33,21 @@ export function parseFlags(argv: string[], spec: FlagSpec): ParsedArgs {
       continue
     }
     if (spec.string.includes(name)) {
-      const value = eq === -1 ? argv[++i] : body.slice(eq + 1)
-      if (value === undefined) {
+      if (eq !== -1) {
+        out[keyOf(name)] = body.slice(eq + 1)
+        continue
+      }
+      const value = argv[i + 1]
+      // A consumed value that itself looks like a flag is a missing value for
+      // the current flag — `--version --dry-run` must not silently take
+      // `--dry-run` as the version. The `--flag=value` form still admits
+      // values starting with `-`.
+      if (value === undefined || value.startsWith('--')) {
         console.error(`missing value for --${name}`)
         Deno.exit(1)
       }
       out[keyOf(name)] = value
+      i++
       continue
     }
     console.error(`unknown argument: ${arg}`)
