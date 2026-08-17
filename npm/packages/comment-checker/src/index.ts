@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createRequire } from "node:module"
-import { Data, Effect, FileSystem, Option, Path } from "effect"
+import { Data, Effect, Option, Path } from "effect"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { Command, Flag } from "effect/unstable/cli"
@@ -17,12 +17,15 @@ class BinaryNotFound extends Data.TaggedError("BinaryNotFound")<{
 
 const getBinaryPath = Effect.gen(function* () {
   const path = yield* Path.Path
-  const fs = yield* FileSystem.FileSystem
 
   const platform = process.platform
   const arch = process.arch
   const pkg = optionalDepName(platform, arch)
 
+  // The platform package ships package.json and the binary together
+  // (files: [bin] in the generated manifest), so a failed require.resolve is
+  // the only missing-state to handle; a spawn-time ENOENT would be a corrupt
+  // install that npm would not have produced.
   const pkgJsonPath = yield* Effect.try({
     try: () => require.resolve(`${pkg}/package.json`),
     catch: () =>
@@ -34,18 +37,7 @@ const getBinaryPath = Effect.gen(function* () {
       }),
   })
 
-  const binaryPath = path.join(path.dirname(pkgJsonPath), binaryFileName(platform))
-
-  if (!(yield* fs.exists(binaryPath))) {
-    return yield* new BinaryNotFound({
-      platform,
-      arch,
-      package: pkg,
-      message: `the npm platform package for ${platform}/${arch} (${pkg}) is not installed`,
-    })
-  }
-
-  return binaryPath
+  return path.join(path.dirname(pkgJsonPath), binaryFileName(platform))
 })
 
 const command = Command.make(

@@ -15,7 +15,7 @@ const launcherPath = fileURLToPath(
   new URL("../../npm/packages/comment-checker/dist/index.mjs", import.meta.url)
 )
 
-const hostDep = `@systemfsoftware/claude-code-comment-checker-${process.platform}-${process.arch}`
+const hostDep = optionalDepName(process.platform, process.arch)
 const skipNoPosixShim =
   process.platform === "win32"
     ? "cannot fabricate a .exe shim in a test fixture; the released binary covers win32"

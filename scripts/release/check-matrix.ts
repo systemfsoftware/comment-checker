@@ -1,5 +1,6 @@
 #!/usr/bin/env -S deno run --allow-read
 import { join, resolve } from '@std/path'
+import { parseFlags } from './args.ts'
 
 const ROOT = join(import.meta.dirname!, '..', '..')
 const DEFAULT_TARGETS_PATH = join(ROOT, 'scripts', 'release', 'targets.json')
@@ -15,33 +16,14 @@ const failures: string[] = []
 const fail = (reason: string) => failures.push(reason)
 const note = (message: string) => console.error(`check-matrix: note: ${message}`)
 
-// CLI: --targets <path> overrides the packaged table (defaults to
-// scripts/release/targets.json); --manifest-path overrides the launcher
-// manifest (defaults to npm/packages/comment-checker/package.json).
-let targetsPath = DEFAULT_TARGETS_PATH
-let manifestPath = MANIFEST_PATH
-const args = Deno.args
-for (let i = 0; i < args.length; i++) {
-  const arg = args[i]
-  if (arg === '--targets') {
-    const value = args[++i]
-    if (value === undefined) {
-      console.error('check-matrix: missing value for --targets')
-      Deno.exit(1)
-    }
-    targetsPath = resolve(value)
-  } else if (arg === '--manifest-path') {
-    const value = args[++i]
-    if (value === undefined) {
-      console.error('check-matrix: missing value for --manifest-path')
-      Deno.exit(1)
-    }
-    manifestPath = resolve(value)
-  } else {
-    console.error(`check-matrix: unknown argument: ${arg}`)
-    Deno.exit(1)
-  }
-}
+const flags = parseFlags(Deno.args, {
+  string: ['targets', 'manifest-path'],
+  rename: { 'manifest-path': 'manifestPath' },
+})
+const targetsArg = flags.targets
+const manifestArg = flags.manifestPath
+const targetsPath = typeof targetsArg === 'string' ? resolve(targetsArg) : DEFAULT_TARGETS_PATH
+const manifestPath = typeof manifestArg === 'string' ? resolve(manifestArg) : MANIFEST_PATH
 
 let targets: Array<
   { target: string; suffix: string; os: string; cpu: string; libc?: string; bin: string }

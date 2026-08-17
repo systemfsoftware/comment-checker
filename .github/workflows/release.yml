@@ -51,11 +51,21 @@ jobs:
           - target: x86_64-pc-windows-msvc
             suffix: win32-x64
             runner: windows-2022
-    env:
-      BINARY_NAME: comment-checker${{ matrix.target == 'x86_64-pc-windows-msvc' && '.exe' || '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # KTD2: the binary name comes from the canonical table, not a second
+      # copy of the win32->.exe rule.
+      - name: Resolve binary name from table
+        shell: bash
+        run: |
+          BINARY_NAME="$(jq -r --arg target "${{ matrix.target }}" '.[] | select(.target == $target) | .bin' scripts/release/targets.json)"
+          test -n "$BINARY_NAME" || {
+            echo "target ${{ matrix.target }} missing from scripts/release/targets.json" >&2
+            exit 1
+          }
+          echo "BINARY_NAME=$BINARY_NAME" >> "$GITHUB_ENV"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
@@ -129,7 +139,7 @@ jobs:
           mkdir -p "$STAGE"
           BIN="target/${{ matrix.target }}/release/${BINARY_NAME}"
           cp "$BIN" "$STAGE/${BINARY_NAME}"
-          SHA="$(sha256sum "$STAGE/${BINARY_NAME}" | cut -d' ' -f1)"
+          SHA="$(shasum -a 256 "$STAGE/${BINARY_NAME}" | cut -d' ' -f1)"
           deno run \
             --allow-read=scripts/release/targets.json,npm/packages/comment-checker/package.json \
             --allow-write="$STAGE" \
@@ -214,39 +224,31 @@ jobs:
           merge-multiple: true
           path: sidecars
 
-      - name: "Gate: every platform package published before root"
+      - name: "Gate: every platform package published with table os/cpu/libc"
         shell: bash
         run: |
-          for SUFFIX in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
+          SUFFIXES="$(jq -r '.[].suffix' scripts/release/targets.json)"
+          test -n "$SUFFIXES" || { echo "targets.json empty" >&2; exit 1; }
+          for SUFFIX in $SUFFIXES; do
             PKG="@systemfsoftware/claude-code-comment-checker-${SUFFIX}"
-            npm view "$PKG@${VERSION}" version --json | grep -q "\"$VERSION\"" || {
+            META="$(npm view "$PKG@$VERSION" version os cpu libc --json)" || {
               echo "platform package $PKG@$VERSION missing" >&2
               exit 1
             }
-          done
-
-      - name: "Gate: published os/cpu/libc match the table"
-        shell: bash
-        run: |
-          for SUFFIX in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
-            PKG="@systemfsoftware/claude-code-comment-checker-${SUFFIX}"
-            META="$(npm view "$PKG@$VERSION" os cpu libc --json)"
             EXPECTED="$(jq -c --arg suffix "$SUFFIX" '.[] | select(.suffix == $suffix) | {os: [.os], cpu: [.cpu], libc: (.libc // null)}' scripts/release/targets.json)"
-            echo "$META" | jq -e -c '{os, cpu, libc}' >/dev/null || {
-              echo "$PKG@$VERSION metadata malformed: $META" >&2
+            echo "$META" | jq -e -c --arg v "$VERSION" '.version == $v and ({os, cpu, libc} == ($expect | fromjson))' --argjson expect "$EXPECTED" >/dev/null || {
+              echo "$PKG@$VERSION mismatch: $(echo "$META" | jq -c '{version, os, cpu, libc}') want $EXPECTED" >&2
               exit 1
             }
-            ACTUAL="$(echo "$META" | jq -c '{os, cpu, libc}')"
-            if [ "$ACTUAL" != "$EXPECTED" ]; then
-              echo "$PKG@$VERSION os/cpu/libc mismatch: got $ACTUAL want $EXPECTED" >&2
-              exit 1
-            fi
+            echo "$SUFFIX ok"
           done
 
       - name: Cross-check published tarballs vs recorded binary sha
         shell: bash
         run: |
-          for SUFFIX in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
+          SUFFIXES="$(jq -r '.[].suffix' scripts/release/targets.json)"
+          test -n "$SUFFIXES" || { echo "targets.json empty" >&2; exit 1; }
+          for SUFFIX in $SUFFIXES; do
             SHA_RECORDED="$(cat "sidecars/binary-${SUFFIX}.sha256")"
             PKG="@systemfsoftware/claude-code-comment-checker-${SUFFIX}"
             TARBALL="$(npm pack "$PKG@${VERSION}" --pack-destination "$RUNNER_TEMP" 2>/dev/null | tail -1)"
@@ -284,10 +286,15 @@ jobs:
       - name: Verify root publish + exact pins
         shell: bash
         run: |
-          npm view "@systemfsoftware/claude-code-comment-checker@$VERSION" version --json | grep -q "\"$VERSION\""
-          for SUFFIX in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
-            npm view "@systemfsoftware/claude-code-comment-checker@$VERSION" optionalDependencies --json | \
-              grep -q "\"@systemfsoftware/claude-code-comment-checker-${SUFFIX}\": \"$VERSION\"" || {
+          ROOT_META="$(npm view "@systemfsoftware/claude-code-comment-checker@$VERSION" version optionalDependencies --json)"
+          echo "$ROOT_META" | jq -e -c --arg v "$VERSION" '.version == $v' >/dev/null || {
+            echo "root version mismatch: $(echo "$ROOT_META" | jq -c '.version')" >&2
+            exit 1
+          }
+          SUFFIXES="$(jq -r '.[].suffix' scripts/release/targets.json)"
+          for SUFFIX in $SUFFIXES; do
+            echo "$ROOT_META" | jq -e --arg k "@systemfsoftware/claude-code-comment-checker-${SUFFIX}" --arg v "$VERSION" \
+              '.optionalDependencies[$k] == $v' >/dev/null || {
               echo "optional pin missing for $SUFFIX@$VERSION" >&2
               exit 1
             }

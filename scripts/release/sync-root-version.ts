@@ -1,5 +1,6 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write
 import { join, resolve } from '@std/path'
+import { parseFlags } from './args.ts'
 
 const ROOT = join(import.meta.dirname!, '..', '..')
 const DEFAULT_MANIFEST_PATH = join(ROOT, 'npm', 'packages', 'comment-checker', 'package.json')
@@ -19,25 +20,14 @@ if (!VERSION_RE.test(version) || version.includes('\n')) {
 // deps in a lockfile, so listing unpublished platform packages would break
 // `pnpm install --frozen-lockfile`); this script injects the five pins from
 // targets.json at publish time, when the platform packages already exist.
-let manifestPath = DEFAULT_MANIFEST_PATH
-const dryRun = Deno.args.includes('--dry-run')
-const args = Deno.args
-for (let i = 0; i < args.length; i++) {
-  const arg = args[i]
-  if (arg === '--manifest-path') {
-    const value = args[++i]
-    if (value === undefined) {
-      console.error('sync-root-version: missing value for --manifest-path')
-      Deno.exit(1)
-    }
-    manifestPath = resolve(value)
-  } else if (arg === '--dry-run') {
-    // handled above
-  } else {
-    console.error(`sync-root-version: unknown argument: ${arg}`)
-    Deno.exit(1)
-  }
-}
+const flags = parseFlags(Deno.args, {
+  string: ['manifest-path'],
+  boolean: ['dry-run'],
+  rename: { 'dry-run': 'dryRun', 'manifest-path': 'manifestPath' },
+})
+const dryRun = flags.dryRun === true
+const manifestArg = flags.manifestPath
+const manifestPath = typeof manifestArg === 'string' ? resolve(manifestArg) : DEFAULT_MANIFEST_PATH
 
 const targets = JSON.parse(await Deno.readTextFile(TARGETS_PATH))
 if (!Array.isArray(targets) || targets.length !== 5) {
