@@ -46,6 +46,46 @@ cargo install --git https://github.com/systemfsoftware/comment-checker --package
 
 Requires Rust 1.85+. Each [GitHub release](https://github.com/systemfsoftware/comment-checker/releases) also attaches `comment-checker-<triple>.tar.gz` tarballs for direct download.
 
+## Publishing
+
+Releases are tag-triggered: pushing a tag `vX.Y.Z` to `main` runs
+[`.github/workflows/release.yml`](.github/workflows/release.yml), which builds
+all five target binaries, publishes the five platform packages and then the
+root launcher — all with npm OIDC trusted publishing and provenance, no static
+tokens in CI. The exact step sequence lives in U3 of the release plan
+(`docs/plans/2026-08-17-001-feat-npm-distribution-release-plan.md`).
+
+To release:
+
+1. Create the six [npm trusted-publisher
+   entries](https://docs.npmjs.com/generating-provenance-statements) with the
+   bindings below (one time).
+2. Push a semver tag: `git tag v0.1.0 && git push origin v0.1.0`.
+3. Watch CI; the root package is published only after every platform package
+   exists and its published binary matches the recorded sha256.
+4. Verify post-publish: a fresh `pnpm dlx`/`npm i -g` install of the root
+   package, run the binary on Linux and on one non-Linux platform, and confirm
+   `npm view @systemfsoftware/claude-code-comment-checker provenance` shows
+   provenance.
+
+The npm trusted-publisher records bind the publishing identity to this
+workflow — the registry-side record has no tag-pattern field, so
+`refs/tags/v*` is enforced by the workflow's `on: push: tags` filter, never by
+the registry-side record:
+
+| Package | Trusted publisher binding |
+|---|---|
+| `@systemfsoftware/claude-code-comment-checker` | Org: `systemfsoftware`, repo: `comment-checker`, workflow: `.github/workflows/release.yml` |
+| `@systemfsoftware/claude-code-comment-checker-linux-x64` | same |
+| `@systemfsoftware/claude-code-comment-checker-linux-arm64` | same |
+| `@systemfsoftware/claude-code-comment-checker-darwin-x64` | same |
+| `@systemfsoftware/claude-code-comment-checker-darwin-arm64` | same |
+| `@systemfsoftware/claude-code-comment-checker-win32-x64` | same |
+
+The version pinned in the committed launcher manifest (`0.1.0`) may lag behind
+releases by design — the git tag is the single version source; the release
+workflow rewrites the published manifest.
+
 ## Quick Start
 
 1. Install (above).
