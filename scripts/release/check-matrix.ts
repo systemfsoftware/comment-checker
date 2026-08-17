@@ -156,7 +156,13 @@ if (declaredNames.length === 0) {
 try {
   await Deno.lstat(RELEASE_WORKFLOW_PATH)
   const content = await Deno.readTextFile(RELEASE_WORKFLOW_PATH)
-  const workflowTargets = new Set(content.match(/(?:x86_64|aarch64)-[a-z0-9-]+/g) ?? [])
+  // Only literal matrix include rows (target: <triple>) — env-var names like
+  // CC_aarch64_unknown_linux_gnu or gcc-aarch64-linux-gnu are not rows.
+  const workflowTargets = new Set(
+    [...content.matchAll(/^\s*-\s*target:\s*((?:x86_64|aarch64)-[a-z0-9-]+)\s*$/gm)].map((m) =>
+      m[1]
+    ),
+  )
   const tableTargets = new Set(targets.map((t) => t.target))
   for (const target of tableTargets) {
     if (!workflowTargets.has(target)) {
