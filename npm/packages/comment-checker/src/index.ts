@@ -4,6 +4,7 @@ import { Data, Effect, FileSystem, Option, Path } from "effect"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { Command, Flag } from "effect/unstable/cli"
+import { binaryFileName, optionalDepName } from "./platform.js"
 
 const require = createRequire(import.meta.url)
 
@@ -13,12 +14,6 @@ class BinaryNotFound extends Data.TaggedError("BinaryNotFound")<{
   readonly package: string
   readonly message: string
 }> {}
-
-const binaryFileName = (platform: NodeJS.Platform): string =>
-  platform === "win32" ? "comment-checker.exe" : "comment-checker"
-
-const optionalDepName = (platform: string, arch: string): string =>
-  `@systemfsoftware/claude-code-comment-checker-${platform}-${arch}`
 
 const getBinaryPath = Effect.gen(function* () {
   const path = yield* Path.Path
