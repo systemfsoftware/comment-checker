@@ -6,24 +6,6 @@ const manifest = JSON.parse(
   readFileSync(new URL("../../npm/packages/comment-checker/package.json", import.meta.url), "utf8")
 )
 
-// The five platform packages the launcher resolves by identity
-// (process.platform/process.arch -> <platform>-<arch>). Keep in sync with
-// scripts/release/targets.json (checked by tests/release).
-const PLATFORMS = [
-  ["linux", "x64"],
-  ["linux", "arm64"],
-  ["darwin", "x64"],
-  ["darwin", "arm64"],
-  ["win32", "x64"],
-]
-
-const expectedOptionalDeps = Object.fromEntries(
-  PLATFORMS.map(([platform, arch]) => [
-    `@systemfsoftware/claude-code-comment-checker-${platform}-${arch}`,
-    "0.1.0",
-  ])
-)
-
 test("launcher manifest declares no install-time script", () => {
   assert.equal(manifest.postinstall, undefined)
   assert.equal(manifest.prepare, undefined)
@@ -36,8 +18,12 @@ test("launcher manifest ships only the built launcher", () => {
   assert.equal(manifest.private, undefined)
 })
 
-test("optionalDependencies pins exactly the five platform packages", () => {
-  assert.deepEqual(manifest.optionalDependencies, expectedOptionalDeps)
+test("committed manifest carries no optionalDependencies (pre-publish)", () => {
+  // pnpm cannot record unresolvable optional deps in a lockfile, so the
+  // committed manifest must not name the unpublished platform packages;
+  // sync-root-version.ts injects the platforms.json pins at publish time.
+  assert.equal(manifest.optionalDependencies, undefined)
+  assert.equal(manifest.version, "0.1.0")
 })
 
 test("publishConfig requests public access and provenance", () => {
