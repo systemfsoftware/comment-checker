@@ -1,0 +1,50 @@
+{
+  "$schema": "https://v2-10-1.turborepo.dev/schema.json",
+  "tasks": {
+    "build": {
+      "outputLogs": "new-only",
+      "inputs": [
+        "src/**",
+        "tsconfig.json",
+        "tsconfig.*.json",
+        "package.json",
+        "tsdown.config.*"
+      ],
+      "outputs": [
+        "dist/**"
+      ],
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": true
+    },
+    "typecheck": {
+      "outputLogs": "errors-only",
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "tsconfig.json",
+        "tsconfig.*.json",
+        "!**/*.md"
+      ],
+      "outputs": [],
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": true
+    },
+    "lint": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "oxlint.config.ts",
+        "!**/*.md"
+      ],
+      "outputs": [],
+      "env": [
+        "OXLINT_FORMAT",
+        "AGENT",
+        "GITHUB_ACTIONS"
+      ],
+      "cache": true
+    }
+  }
+}

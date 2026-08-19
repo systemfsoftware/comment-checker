@@ -5,14 +5,15 @@
   "type": "module",
   "packageManager": "pnpm@11.21.0",
   "scripts": {
-    "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
-    "lint": "oxlint -c .oxlintrc.json --no-error-on-unmatched-pattern"
+    "build": "turbo build",
+    "typecheck": "turbo typecheck",
+    "lint": "turbo lint"
   },
   "devDependencies": {
     "@effect/tsgo": "latest",
-    "oxlint": "latest",
+    "@systemfsoftware/tsconfig": "^1.3.1",
     "tsdown": "latest",
+    "turbo": "^2.10.5",
     "typescript": "latest"
   }
 }

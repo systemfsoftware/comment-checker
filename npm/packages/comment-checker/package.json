@@ -19,7 +19,8 @@
   },
   "scripts": {
     "build": "tsdown",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -b",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "dependencies": {
     "@effect/platform-node": "4.0.0-rc.108",
@@ -27,6 +28,7 @@
   },
   "devDependencies": {
     "@types/node": "latest",
+    "oxlint": "latest",
     "tsdown": "latest",
     "typescript": "latest"
   },
