@@ -25,17 +25,16 @@ importers:
         version: 7.0.2
 
   npm/packages/comment-checker:
-    dependencies:
+    devDependencies:
       '@effect/platform-node':
         specifier: 4.0.0-rc.108
         version: 4.0.0-rc.108(effect@4.0.0-rc.108)(ioredis@5.11.1)
-      effect:
-        specifier: 4.0.0-rc.108
-        version: 4.0.0-rc.108
-    devDependencies:
       '@types/node':
         specifier: latest
         version: 26.2.0
+      effect:
+        specifier: 4.0.0-rc.108
+        version: 4.0.0-rc.108
       oxlint:
         specifier: latest
         version: 1.78.0

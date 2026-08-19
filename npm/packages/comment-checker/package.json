@@ -22,12 +22,10 @@
     "typecheck": "tsc -b",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
-  "dependencies": {
-    "@effect/platform-node": "4.0.0-rc.108",
-    "effect": "4.0.0-rc.108"
-  },
   "devDependencies": {
+    "@effect/platform-node": "4.0.0-rc.108",
     "@types/node": "latest",
+    "effect": "4.0.0-rc.108",
     "oxlint": "latest",
     "tsdown": "latest",
     "typescript": "latest"
