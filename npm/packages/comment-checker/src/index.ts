@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createRequire } from "node:module"
-import { Data, Effect, Option, Path } from "effect"
+import { Data, Effect, Option, Path, Runtime } from "effect"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { Command, Flag } from "effect/unstable/cli"
@@ -13,7 +13,16 @@ class BinaryNotFound extends Data.TaggedError("BinaryNotFound")<{
   readonly arch: string
   readonly package: string
   readonly message: string
-}> {}
+}> { }
+
+class ChildProcessExited extends Data.TaggedError("ChildProcessExited")<{
+  readonly exitCode: ChildProcessSpawner.ExitCode
+}> {
+  override get [Runtime.errorExitCode](): ChildProcessSpawner.ExitCode {
+    return this.exitCode
+  }
+  override readonly [Runtime.errorReported] = false
+}
 
 const getBinaryPath = Effect.gen(function* () {
   const path = yield* Path.Path
@@ -22,10 +31,6 @@ const getBinaryPath = Effect.gen(function* () {
   const arch = process.arch
   const pkg = optionalDepName(platform, arch)
 
-  // The platform package ships package.json and the binary together
-  // (files: [bin] in the generated manifest), so a failed require.resolve is
-  // the only missing-state to handle; a spawn-time ENOENT would be a corrupt
-  // install that npm would not have produced.
   const pkgJsonPath = yield* Effect.try({
     try: () => require.resolve(`${pkg}/package.json`),
     catch: () =>
@@ -60,9 +65,11 @@ const command = Command.make(
       })
 
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
-      const exitCode = yield* spawner.exitCode(child)
+      const code = yield* spawner.exitCode(child)
 
-      process.exitCode = exitCode
+      if (code !== ChildProcessSpawner.ExitCode(0)) {
+        return yield* new ChildProcessExited({ exitCode: code })
+      }
     })
 )
 
