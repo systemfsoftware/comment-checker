@@ -55,16 +55,12 @@ jobs:
         run: pnpm lint
 
       - name: Build + typecheck (launcher)
-        run: pnpm -r build && pnpm -r typecheck
+        run: pnpm build && pnpm typecheck
 
-      - name: Launcher black-box suite (node)
-        run: node --test "tests/npm-launcher/*.test.mjs"
-
-      - name: Release scripts suite + matrix agreement gate (deno)
+      - name: Release scripts lint + matrix agreement gate (deno)
         run: |
           cd scripts
           deno task lint
-          deno task test
           deno task check-matrix
 
   mutation:

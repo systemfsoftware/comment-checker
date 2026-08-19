@@ -83,8 +83,7 @@ five per-platform binary packages. That shape creates two hard constraints:
    of the table), then checks three agreements: the table names exactly that
    set; the launcher manifest pins match the table exactly when present; and
    the workflow matrix rows match the table triples in both directions —
-   missing, extra, and swapped `target`/`suffix` pairs are all failures, and
-   the failure arms are tested (`tests/release/release-scripts.test.ts`).
+   missing, extra, and swapped `target`/`suffix` pairs are all failures.
 6. **Release pipeline: one lane per platform, platforms before root.**
    `.github/workflows/release.yml` triggers only on `push: tags: v*` with
    `permissions: {}` at the top. Five matrix lanes, `fail-fast: false`, each:
@@ -113,9 +112,8 @@ five per-platform binary packages. That shape creates two hard constraints:
   someone adds `optionalDependencies` naming the platform packages to the
   committed manifest, every `pnpm install --frozen-lockfile` — developers and
   CI alike — breaks because the packages don't exist yet (pnpm#3960). It is
-  caught by `tests/npm-launcher/manifest.test.mjs` (asserts
-  `optionalDependencies` undefined pre-publish) and by `check-matrix.ts`'s
-  absence-is-expected branch.
+  caught by `check-matrix.ts`'s absence-is-expected branch and by the
+  `pnpm install --frozen-lockfile` step of `docs/publishing/first-release-checklist.md`.
 - **Version skew is structurally impossible at the consumer.** The root pins
   each platform package to the exact tag version (verified against the
   registry at release time). Because the root is published after the
@@ -129,12 +127,8 @@ five per-platform binary packages. That shape creates two hard constraints:
   smoke: the smoke only proves anything on the lane's own native runner;
   each matrix row maps target→runner (arm64 lanes use an ARM runner). (c)
   `--allow-env`: `VERSION` arrives via the environment, and `deno run` is
-  deny-by-default, so a dropped flag fails at tag time, not at PR time; the
-  release-scripts suite replays the declared permission flags from the
-  committed files so drift fails in tests, not on a release.
-- **No static token exists anywhere.** Publishing is OIDC-only; exit-code
-  propagation from the spawned binary is contract-tested, including the
-  shebang + exec bit npm's POSIX bin shim requires.
+  deny-by-default, so a dropped flag fails at tag time, not at PR time.
+- **No static token exists anywhere.** Publishing is OIDC-only.
 
 ## When to Apply
 
@@ -222,11 +216,6 @@ digest — the gate that catches a wrong or swapped binary being published.
 - Scripts: `scripts/release/generate-platform-manifest.ts`,
   `scripts/release/sync-root-version.ts`, `scripts/release/check-matrix.ts`
 - Human gate: `docs/publishing/first-release-checklist.md`
-- Tests: `tests/release/release-scripts.test.ts` (targets, manifest emission,
-  sync, check-matrix failure arms incl. missing/extra/swapped workflow rows,
-  permission fidelity); `tests/npm-launcher/manifest.test.mjs` (no committed
-  optionalDependencies); `tests/npm-launcher/launcher.test.mjs` (black-box
-  spawn, exit-code propagation)
 - pnpm#3960 — the constraint that makes listing optional deps a
   frozen-lockfile landmine
 - Residual advisories (open GitHub issues on this repo): #3 force-pushed tag

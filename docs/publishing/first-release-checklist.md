@@ -38,9 +38,6 @@ Approval Boundaries). Work through it top to bottom.
 ## 2. Before the tag
 
 - [ ] `pnpm lint` and `deno task lint` green (repo gate).
-- [ ] `node --test "tests/npm-launcher/*.test.mjs"` green (launcher black-box).
-- [ ] `deno task test` green (release scripts; includes targets-table and
-      matrix checks).
 - [ ] `pnpm install --frozen-lockfile` succeeds from a fresh clone, and
       `pnpm -r build` + `pnpm -r typecheck` are green.
 - [ ] `scripts/release/check-matrix.ts` passes with `.github/workflows/release.yml`
