@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write
+import { parseArgs } from '@std/cli/parse-args'
 import { join, resolve } from '@std/path'
-import { parseFlags } from './args.ts'
 
 const ROOT = join(import.meta.dirname!, '..', '..')
 const DEFAULT_MANIFEST_PATH = join(ROOT, 'npm', 'packages', 'comment-checker', 'package.json')
@@ -20,11 +20,25 @@ if (!VERSION_RE.test(version) || version.includes('\n')) {
 // deps in a lockfile, so listing unpublished platform packages would break
 // `pnpm install --frozen-lockfile`); this script injects the five pins from
 // targets.json at publish time, when the platform packages already exist.
-const flags = parseFlags(Deno.args, {
-  string: ['manifest-path'],
+const flags = parseArgs(Deno.args, {
+  alias: { 'dry-run': 'dryRun', 'manifest-path': 'manifestPath' },
   boolean: ['dry-run'],
-  rename: { 'dry-run': 'dryRun', 'manifest-path': 'manifestPath' },
+  string: ['manifest-path'],
+  unknown: (arg) => {
+    console.error(`unknown argument: ${arg}`)
+    Deno.exit(1)
+  },
 })
+// std parses a string flag given without a value as ""; reject it here, as the
+// former parser did at parse time.
+if (flags.manifestPath === '') {
+  console.error('missing value for --manifest-path')
+  Deno.exit(1)
+}
+if (flags._.length > 0) {
+  console.error(`unknown argument: ${flags._[0]}`)
+  Deno.exit(1)
+}
 const dryRun = flags.dryRun === true
 const manifestArg = flags.manifestPath
 const manifestPath = typeof manifestArg === 'string' ? resolve(manifestArg) : DEFAULT_MANIFEST_PATH

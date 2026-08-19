@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --allow-read
+import { parseArgs } from '@std/cli/parse-args'
 import { join, resolve } from '@std/path'
-import { parseFlags } from './args.ts'
 
 const ROOT = join(import.meta.dirname!, '..', '..')
 const DEFAULT_TARGETS_PATH = join(ROOT, 'scripts', 'release', 'targets.json')
@@ -16,10 +16,33 @@ const failures: string[] = []
 const fail = (reason: string) => failures.push(reason)
 const note = (message: string) => console.error(`check-matrix: note: ${message}`)
 
-const flags = parseFlags(Deno.args, {
+const flags = parseArgs(Deno.args, {
+  alias: { 'manifest-path': 'manifestPath', 'workflow-path': 'workflowPath' },
   string: ['targets', 'manifest-path', 'workflow-path'],
-  rename: { 'manifest-path': 'manifestPath', 'workflow-path': 'workflowPath' },
+  unknown: (arg) => {
+    console.error(`unknown argument: ${arg}`)
+    Deno.exit(1)
+  },
 })
+// std parses a string flag given without a value as "" (the --flag=value form
+// still admits values starting with "-"); reject it here, as the former
+// parser did at parse time.
+for (
+  const [flag, key] of [
+    ['targets', 'targets'],
+    ['manifest-path', 'manifestPath'],
+    ['workflow-path', 'workflowPath'],
+  ] as const
+) {
+  if (flags[key] === '') {
+    console.error(`missing value for --${flag}`)
+    Deno.exit(1)
+  }
+}
+if (flags._.length > 0) {
+  console.error(`unknown argument: ${flags._[0]}`)
+  Deno.exit(1)
+}
 const targetsArg = flags.targets
 const manifestArg = flags.manifestPath
 const workflowArg = flags.workflowPath

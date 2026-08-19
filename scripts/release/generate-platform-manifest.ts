@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write
+import { parseArgs } from '@std/cli/parse-args'
 import { join } from '@std/path'
-import { parseFlags } from './args.ts'
 
 const ROOT = join(import.meta.dirname!, '..', '..')
 
@@ -21,11 +21,35 @@ const LAUNCHER: { name: string; repository: { type: string; url: string } } = JS
 )
 
 // CLI: --suffix <suffix> --version <version> --out <dir> [--binary-sha256 <hex>] [--dry-run]
-const args = parseFlags(Deno.args, {
-  string: ['suffix', 'version', 'out', 'binary-sha256'],
+const args = parseArgs(Deno.args, {
+  alias: { 'binary-sha256': 'binarySha256', 'dry-run': 'dryRun' },
   boolean: ['dry-run'],
-  rename: { 'binary-sha256': 'binarySha256', 'dry-run': 'dryRun' },
+  string: ['suffix', 'version', 'out', 'binary-sha256'],
+  unknown: (arg) => {
+    console.error(`unknown argument: ${arg}`)
+    Deno.exit(1)
+  },
 })
+// std parses a string flag given without a value as "" (the --flag=value form
+// still accepts values starting with "-"); reject it here, as the former
+// parser did at parse time.
+for (
+  const [flag, key] of [
+    ['suffix', 'suffix'],
+    ['version', 'version'],
+    ['out', 'out'],
+    ['binary-sha256', 'binarySha256'],
+  ] as const
+) {
+  if (args[key] === '') {
+    console.error(`missing value for --${flag}`)
+    Deno.exit(1)
+  }
+}
+if (args._.length > 0) {
+  console.error(`unknown argument: ${args._[0]}`)
+  Deno.exit(1)
+}
 
 for (const flag of ['suffix', 'version', 'out'] as const) {
   if (typeof args[flag] !== 'string') {

@@ -30,6 +30,7 @@
   "workspace": {
     "dependencies": [
       "jsr:@std/assert@1.0.19",
+      "jsr:@std/cli@1.0.15",
       "jsr:@std/path@1.1.6"
     ]
   }
