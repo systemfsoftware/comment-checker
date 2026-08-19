@@ -1,55 +1,16 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write
-import { parseArgs } from '@std/cli/parse-args'
 import { join } from '@std/path'
+import { parseCliArgs } from './cli.ts'
+import { LAUNCHER_MANIFEST_PATH, type LauncherManifest, type Target, TARGETS_PATH } from './shared.ts'
 
-const ROOT = join(import.meta.dirname!, '..', '..')
+const TARGETS: Target[] = JSON.parse(await Deno.readTextFile(TARGETS_PATH))
+const LAUNCHER: LauncherManifest = JSON.parse(await Deno.readTextFile(LAUNCHER_MANIFEST_PATH))
 
-interface Target {
-  target: string
-  suffix: string
-  os: string
-  cpu: string
-  libc?: string
-  bin: string
-}
-
-const TARGETS: Target[] = JSON.parse(
-  await Deno.readTextFile(join(ROOT, 'scripts', 'release', 'targets.json')),
-)
-const LAUNCHER: { name: string; repository: { type: string; url: string } } = JSON.parse(
-  await Deno.readTextFile(join(ROOT, 'npm', 'packages', 'comment-checker', 'package.json')),
-)
-
-// CLI: --suffix <suffix> --version <version> --out <dir> [--binary-sha256 <hex>] [--dry-run]
-const args = parseArgs(Deno.args, {
+const args = parseCliArgs({
   alias: { 'binary-sha256': 'binarySha256', 'dry-run': 'dryRun' },
   boolean: ['dry-run'],
   string: ['suffix', 'version', 'out', 'binary-sha256'],
-  unknown: (arg) => {
-    console.error(`unknown argument: ${arg}`)
-    Deno.exit(1)
-  },
 })
-// std parses a string flag given without a value as "" (the --flag=value form
-// still accepts values starting with "-"); reject it here, as the former
-// parser did at parse time.
-for (
-  const [flag, key] of [
-    ['suffix', 'suffix'],
-    ['version', 'version'],
-    ['out', 'out'],
-    ['binary-sha256', 'binarySha256'],
-  ] as const
-) {
-  if (args[key] === '') {
-    console.error(`missing value for --${flag}`)
-    Deno.exit(1)
-  }
-}
-if (args._.length > 0) {
-  console.error(`unknown argument: ${args._[0]}`)
-  Deno.exit(1)
-}
 
 for (const flag of ['suffix', 'version', 'out'] as const) {
   if (typeof args[flag] !== 'string') {
@@ -81,9 +42,8 @@ const pkg: Record<string, unknown> = {
   os: [entry.os],
   cpu: [entry.cpu],
   files: [entry.bin],
-  // No `bin` field on platform packages (esbuild precedent): installing one
-  // would create a top-level `comment-checker` shim that collides with the
-  // launcher's own bin of the same name.
+  // No bin field — a platform package's bin would collide with the launcher's
+  // own comment-checker shim.
   publishConfig: { access: 'public', provenance: true },
 }
 if (entry.libc !== undefined) {
