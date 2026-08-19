@@ -17,16 +17,18 @@ Approval Boundaries). Work through it top to bottom.
       packages (`-linux-x64`, `-linux-arm64`, `-darwin-x64`, `-darwin-arm64`,
       `-win32-x64`). Every entry binds to:
       - Organization / Repository: `systemfsoftware` / `comment-checker`
-      - Workflow Filename: `.github/workflows/release.yml`
+      - Workflow Filename: `release.yml` (filename only; npm's
+        trusted-publisher form rejects full paths)
       - Environment: `npm-release` (recommended; see note below)
       npm's trusted-publisher form has **no tag-pattern field** — the
       `refs/tags/v*` gate is enforced by the workflow's `on: push: tags`
       filter, never by the registry-side record.
-- [ ] Brand-new package names: npm may require a one-time seed publish before a
-      trusted-publisher record can be configured for a name that has never
-      existed. If the form rejects a name, seed-publish an empty placeholder
-      (`npm publish --access public` with a trivial tarball) once per name,
-      then configure the record. Budget a human seed per name if needed.
+- [ ] Brand-new package names: npm's trusted-publisher record requires the
+      package to already exist (no first-publish via OIDC; see npm/cli#8544).
+      Run the one-time token bootstrap in
+      `docs/publishing/first-publish-bootstrap.md` (publishes a
+      `0.0.0-dummy-npm` placeholder per name, then configures the six records;
+      ~2 minutes).
 - [ ] Recommended: create a GitHub Environment named `npm-release` and add
       required reviewers to the publish jobs. Deferrable — if skipped, the
       convention is exact semver tags only. If added, the environment must be
