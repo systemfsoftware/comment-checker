@@ -9,7 +9,7 @@
   },
   "type": "module",
   "bin": {
-    "comment-checker": "./dist/index.mjs"
+    "comment-checker": "dist/index.mjs"
   },
   "files": [
     "dist"

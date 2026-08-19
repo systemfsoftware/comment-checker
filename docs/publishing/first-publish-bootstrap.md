@@ -44,7 +44,9 @@ for SUFFIX in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
     scripts/release/generate-platform-manifest.ts \
     --suffix "$SUFFIX" --version "$DUMMY" --out "$STAGE"
   touch "$STAGE/$(jq -r '.files[0]' "$STAGE/package.json")"   # placeholder binary in tarball
-  (cd "$STAGE" && npm publish --access public --no-provenance)
+  # prerelease version (0.0.0-dummy-npm) requires an explicit --tag; "next"
+  # keeps the placeholder off the "latest" dist-tag
+  (cd "$STAGE" && npm publish --access public --no-provenance --tag next)
 done
 
 # root launcher (staged copy; repo file untouched)
@@ -56,11 +58,18 @@ VERSION="$DUMMY" deno run --allow-env \
   --allow-read=scripts/release/targets.json,"$ROOT_STAGE/package.json" \
   --allow-write="$ROOT_STAGE/package.json" \
   scripts/release/sync-root-version.ts --manifest-path "$ROOT_STAGE/package.json"
-(cd "$ROOT_STAGE" && npm publish --access public --no-provenance)
+(cd "$ROOT_STAGE" && npm publish --access public --no-provenance --tag next)
 ```
 
-If a publish still reports an OIDC/provenance attempt, force it off with the
-environment variable `NPM_CONFIG_PROVENANCE=false` on that publish and retry.
+Two npm gotchas this accounts for:
+
+- A prerelease version (hyphen suffix, e.g. `0.0.0-dummy-npm`) is rejected
+  without an explicit `--tag` ("You must specify a tag using --tag when
+  publishing a prerelease version"). `--tag next` satisfies it and keeps the
+  placeholder off `latest`.
+- npm strips a `bin` entry whose path starts with `./` (`"bin": {…,
+  "./dist/index.mjs"}` is silently removed at publish). The committed launcher
+  manifest must use a bare relative path (`dist/index.mjs`).
 
 ## Configure one trusted publisher per package
 
