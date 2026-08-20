@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write
 import { resolve } from '@std/path'
-import { diffLines } from 'diff'
+import { diff } from '@libs/diff'
 import { parseCliArgs } from './cli.ts'
 import {
   LAUNCHER_MANIFEST_PATH,
@@ -48,15 +48,8 @@ manifest.optionalDependencies = Object.fromEntries(
 const next = JSON.stringify(manifest, null, 2) + (original.endsWith('\n') ? '\n' : '')
 
 if (dryRun) {
-  // jsdiff does the LCS; render only the changed lines as a - / + preview.
-  for (const part of diffLines(original, next)) {
-    if (!part.added && !part.removed) continue
-    const marker = part.added ? '+' : '-'
-    const body = part.value.endsWith('\n') ? part.value.slice(0, -1) : part.value
-    for (const line of body.split('\n')) {
-      console.log(`${marker} ${line}`)
-    }
-  }
+  // @libs/diff (patience algorithm) produces a real unified patch.
+  console.log(diff(original, next))
 } else {
   await Deno.writeTextFile(manifestPath, next)
 }
