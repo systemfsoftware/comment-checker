@@ -22,15 +22,21 @@ const flags = parseCliArgs({
   string: ['targets', 'manifest-path', 'workflow-path'],
 })
 const targetsPath = typeof flags.targets === 'string' ? resolve(flags.targets) : TARGETS_PATH
-const manifestPath = typeof flags.manifestPath === 'string' ? resolve(flags.manifestPath) : LAUNCHER_MANIFEST_PATH
-const workflowPath = typeof flags.workflowPath === 'string' ? resolve(flags.workflowPath) : RELEASE_WORKFLOW_PATH
+const manifestPath = typeof flags.manifestPath === 'string'
+  ? resolve(flags.manifestPath)
+  : LAUNCHER_MANIFEST_PATH
+const workflowPath = typeof flags.workflowPath === 'string'
+  ? resolve(flags.workflowPath)
+  : RELEASE_WORKFLOW_PATH
 
 async function readJsonOrExit(path: string, label: string): Promise<unknown> {
   try {
     return JSON.parse(await Deno.readTextFile(path))
   } catch (error) {
     console.error(
-      `check-matrix: FAIL: cannot read ${label} ${path}: ${error instanceof Error ? error.message : String(error)}`,
+      `check-matrix: FAIL: cannot read ${label} ${path}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     )
     Deno.exit(1)
   }
@@ -42,9 +48,9 @@ function checkTable(targets: Target[]) {
   const extra = suffixes.filter((s) => !(EXPECTED_SUFFIXES as string[]).includes(s))
   if (missing.length > 0 || extra.length > 0) {
     fail(
-      `targets table must name exactly the supported platform set; missing: ${missing.join(', ') || 'none'}, extra: ${
-        extra.join(', ') || 'none'
-      }`,
+      `targets table must name exactly the supported platform set; missing: ${
+        missing.join(', ') || 'none'
+      }, extra: ${extra.join(', ') || 'none'}`,
     )
   }
   for (const entry of targets) {
@@ -60,12 +66,16 @@ function checkTable(targets: Target[]) {
     }
     if (entry.os === 'linux' && entry.libc !== 'glibc') {
       fail(
-        `target ${entry.target}: linux targets must carry libc "glibc", got ${JSON.stringify(entry.libc)}`,
+        `target ${entry.target}: linux targets must carry libc "glibc", got ${
+          JSON.stringify(entry.libc)
+        }`,
       )
     }
     if (entry.os !== 'linux' && entry.libc !== undefined) {
       fail(
-        `target ${entry.target}: non-linux targets must not carry libc, got ${JSON.stringify(entry.libc)}`,
+        `target ${entry.target}: non-linux targets must not carry libc, got ${
+          JSON.stringify(entry.libc)
+        }`,
       )
     }
   }
@@ -117,7 +127,9 @@ async function checkWorkflow(workflowPath: string, targets: Target[]) {
         fail(`release.yml does not list release target ${target}`)
       } else if (workflowPairs.get(target) !== suffix) {
         fail(
-          `release.yml lists ${target} with suffix ${workflowPairs.get(target)}, table says ${suffix}`,
+          `release.yml lists ${target} with suffix ${
+            workflowPairs.get(target)
+          }, table says ${suffix}`,
         )
       }
     }

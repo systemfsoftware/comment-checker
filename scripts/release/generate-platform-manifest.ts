@@ -1,7 +1,12 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write
 import { join } from '@std/path'
 import { parseCliArgs } from './cli.ts'
-import { LAUNCHER_MANIFEST_PATH, type LauncherManifest, type Target, TARGETS_PATH } from './shared.ts'
+import {
+  LAUNCHER_MANIFEST_PATH,
+  type LauncherManifest,
+  type Target,
+  TARGETS_PATH,
+} from './shared.ts'
 
 const TARGETS: Target[] = JSON.parse(await Deno.readTextFile(TARGETS_PATH))
 const LAUNCHER: LauncherManifest = JSON.parse(await Deno.readTextFile(LAUNCHER_MANIFEST_PATH))

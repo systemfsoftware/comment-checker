@@ -2,7 +2,8 @@
   "imports": {
     "@std/assert": "jsr:@std/assert@1.0.19",
     "@std/cli": "jsr:@std/cli@1.0.15",
-    "@std/path": "jsr:@std/path@1.1.6"
+    "@std/path": "jsr:@std/path@1.1.6",
+    "diff": "npm:diff@9.0.0"
   },
   "tasks": {
     "manifest:generate": "deno run --allow-read=release/targets.json,../npm/packages/comment-checker/package.json release/generate-platform-manifest.ts",

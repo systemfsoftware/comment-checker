@@ -5,7 +5,9 @@
     "jsr:@std/cli@1.0.15": "1.0.15",
     "jsr:@std/internal@^1.0.12": "1.0.14",
     "jsr:@std/internal@^1.0.14": "1.0.14",
-    "jsr:@std/path@1.1.6": "1.1.6"
+    "jsr:@std/path@1.1.6": "1.1.6",
+    "npm:diff@*": "9.0.0",
+    "npm:diff@9.0.0": "9.0.0"
   },
   "jsr": {
     "@std/assert@1.0.19": {
@@ -27,11 +29,17 @@
       ]
     }
   },
+  "npm": {
+    "diff@9.0.0": {
+      "integrity": "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw=="
+    }
+  },
   "workspace": {
     "dependencies": [
       "jsr:@std/assert@1.0.19",
       "jsr:@std/cli@1.0.15",
-      "jsr:@std/path@1.1.6"
+      "jsr:@std/path@1.1.6",
+      "npm:diff@9.0.0"
     ]
   }
 }
