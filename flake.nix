@@ -14,9 +14,11 @@
         default = pkgs.mkShell {
           packages = with pkgs; [
             # Rust toolchain (rustc 1.97 — satisfies rust-version = 1.85).
-            # clippy/rustfmt/cargo are the same toolchain family; cargo-mutants
-            # drives `cargo` from PATH.
+            # rustc MUST be explicit: cargo resolves rustc via PATH, and a
+            # dev shell without it silently borrows whatever rustc the host
+            # happens to expose (on CI runners: the rustup proxy).
             cargo
+            rustc
             clippy
             rustfmt
             cargo-mutants
