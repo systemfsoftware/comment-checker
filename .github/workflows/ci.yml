@@ -35,10 +35,10 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Format check
-        run: CARGO_BUILD_JOBS=4 cargo fmt --check
+        run: cargo fmt --check
 
       - name: Clippy (deny warnings)
-        run: CARGO_BUILD_JOBS=4 cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Test (unit + property + composition + F1)
         run: cargo test --all-targets -- --test-threads=4
@@ -78,21 +78,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Stock rust-lang toolchain through rustup; cargo-mutants is a
-      # registry-installed cargo subcommand (named in the package's list,
-      # already published as cargo-mutants 27.1.0).
       - uses: actions-rust-lang/setup-rust-toolchain@0267444136ce4919088f5eae0461f736f21356de # v1
         with:
           toolchain: stable
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
 
       - name: Install cargo-mutants subcommand
         run: |
           cargo install cargo-mutants
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
-      # Cargo build state for the miss path. Keyed on the dependency
-      # lockfile + toolchain surface; the shared `cargo-` restore prefix
-      # also picks up bags the gate job saved under the same namespace.
+      - name: Cache turbo verdicts
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ hashFiles('package.json', 'Cargo.toml', 'Cargo.lock', '.cargo/config.toml', 'crates/comment-checker/Cargo.toml', 'crates/comment-checker/src/**', 'crates/comment-checker/tests/**', 'turbo.json', 'npm/packages/comment-checker/package.json') }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
       - name: Cache cargo build (mutants miss path)
         uses: actions/cache@v4
         with:
@@ -103,5 +113,13 @@ jobs:
           key: ${{ runner.os }}-cargo-mut-${{ hashFiles('Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-      - name: Mutation gate (core classifier, 100%)
-        run: CARGO_BUILD_JOBS=4 cargo mutants --file crates/comment-checker/src/classify.rs --timeout 90
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Mutation gate via turbo (core classifier, 100%)
+        run: pnpm install --frozen-lockfile && pnpm mutants
