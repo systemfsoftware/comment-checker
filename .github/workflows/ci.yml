@@ -25,14 +25,18 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
+      # No `bash -l`: login shells re-source runner profiles which re-prepend
+      # ~/.cargo/bin ahead of the dev shell, and the rustup shim then hijacks
+      # the toolchain (observed: rustup updated stable mid-build, removed
+      # rust-std, E0463). `nix develop -c` already exports the full PATH.
       - name: Format check
-        run: nix develop -c bash -lc 'CARGO_BUILD_JOBS=4 cargo fmt --check'
+        run: nix develop -c bash -c 'CARGO_BUILD_JOBS=4 cargo fmt --check'
 
       - name: Clippy (deny warnings)
-        run: nix develop -c bash -lc 'CARGO_BUILD_JOBS=4 cargo clippy --all-targets -- -D warnings'
+        run: nix develop -c bash -c 'CARGO_BUILD_JOBS=4 cargo clippy --all-targets -- -D warnings'
 
       - name: Test (unit + property + composition + F1)
-        run: nix develop -c bash -lc 'cargo test --all-targets -- --test-threads=4'
+        run: nix develop -c bash -c 'cargo test --all-targets -- --test-threads=4'
 
   npm:
     runs-on: ubuntu-latest
@@ -113,4 +117,4 @@ jobs:
             pnpm-store-${{ runner.os }}-
 
       - name: Mutation gate via turbo (core classifier, 100%)
-        run: nix develop -c bash -lc 'pnpm install --frozen-lockfile && CARGO_BUILD_JOBS=4 pnpm mutants'
+        run: nix develop -c bash -c 'pnpm install --frozen-lockfile && CARGO_BUILD_JOBS=4 pnpm mutants'
