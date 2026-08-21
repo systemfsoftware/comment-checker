@@ -3,6 +3,8 @@ node_modules
 *.log
 mutants.out*
 npm/bin
+.turbo/
 .DS_Store
 dist
+dist-types
 *.tsbuildinfo

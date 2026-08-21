@@ -42,6 +42,30 @@ A per-kind/precision-recall gate on the corpus that trips when a kind's
 classifier weakens — including a single-case kind that goes wrong — so a
 weakness in one kind cannot hide inside an aggregate F1 score.
 
+## npm distribution
+
+### Launcher
+The root npm package (`@systemfsoftware/claude-code-comment-checker`) whose
+`bin` is the `comment-checker` shim. It resolves the host platform package by
+identity at runtime and spawns the binary — the only package that declares a
+bin.
+
+### Platform package
+One per os-cpu pair (`-linux-x64`, `-darwin-arm64`, …), generated from
+`scripts/release/targets.json`: ships only the compiled binary and its
+manifest (`os`/`cpu`/`libc` fields, no `bin`). The launcher's
+`optionalDependencies` pins all five to the release version.
+
+The committed launcher manifest never lists these packages as
+`optionalDependencies` — pnpm cannot lock unpublished platform packages
+(pnpm#3960), so the pins are injected from the targets table at publish
+time; absence in-tree is expected, not a defect.
+
+### Release lane
+A matrix row in the release workflow: one platform/arch build, gate, smoke,
+and publish run on its native runner. Platforms publish before the launcher,
+and the release cannot proceed if any lane fails.
+
 ## Flagged ambiguities
 
 - "context" had been used for both the language (scope/position) and the

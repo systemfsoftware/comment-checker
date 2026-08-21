@@ -1,0 +1,20 @@
+{
+  "imports": {
+    "@std/assert": "jsr:@std/assert@1.0.19",
+    "@std/cli": "jsr:@std/cli@1.0.15",
+    "@std/path": "jsr:@std/path@1.1.6",
+    "@libs/diff": "jsr:@libs/diff@4.0.0"
+  },
+  "tasks": {
+    "manifest:generate": "deno run --allow-read=release/targets.json,../npm/packages/comment-checker/package.json release/generate-platform-manifest.ts",
+    "manifest:sync-root": "deno run --allow-env --allow-read=release/targets.json,../npm/packages/comment-checker/package.json --allow-write=../npm/packages/comment-checker/package.json release/sync-root-version.ts",
+    "check-matrix": "deno run --allow-read=release/targets.json,../npm/packages/comment-checker/package.json,../.github/workflows/release.yml release/check-matrix.ts",
+    "lint": "deno lint --config ./deno.jsonc ."
+  },
+  "fmt": {
+    "lineWidth": 100,
+    "indentWidth": 2,
+    "singleQuote": true,
+    "semiColons": false
+  }
+}

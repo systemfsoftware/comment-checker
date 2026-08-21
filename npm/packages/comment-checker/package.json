@@ -1,0 +1,37 @@
+{
+  "name": "@systemfsoftware/claude-code-comment-checker",
+  "version": "0.1.0",
+  "description": "Claude Code PostToolUse hook that blocks unnecessary comments (npm distribution launcher)",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/comment-checker.git"
+  },
+  "type": "module",
+  "bin": {
+    "comment-checker": "dist/index.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc -b",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "4.0.0-rc.108",
+    "@types/node": "latest",
+    "effect": "4.0.0-rc.108",
+    "oxlint": "latest",
+    "tsdown": "latest",
+    "typescript": "latest"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
