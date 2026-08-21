@@ -66,6 +66,21 @@ A matrix row in the release workflow: one platform/arch build, gate, smoke,
 and publish run on its native runner. Platforms publish before the launcher,
 and the release cannot proceed if any lane fails.
 
+## Mutation gate
+
+### Verdict cache
+The turbo task cache that stores the mutation gate's result keyed on the
+gate's input set; unchanged inputs replay the stored verdict instead of
+re-running the mutant loop.
+
+Two hash surfaces govern it. The task hash is the gate's own key: every
+file that can change the verdict must be an explicit task input — automatic
+coverage extends only to the script body and declared env values. The
+transport key (the CI cache step's key) must be a superset of the task hash
+surface, because an exact-key restore suppresses the post-run save: a
+narrower transport key does not replay stale verdicts, it discards fresh
+ones.
+
 ## Flagged ambiguities
 
 - "context" had been used for both the language (scope/position) and the
