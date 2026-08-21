@@ -61,9 +61,6 @@
         "$TURBO_ROOT$/crates/comment-checker/tests/**"
       ],
       "outputs": [],
-      "env": [
-        "CARGO_BUILD_JOBS"
-      ],
       "cache": true
     }
   }
