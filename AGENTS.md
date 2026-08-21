@@ -63,20 +63,19 @@ These are the checks that must pass. The one-shot gate below runs them as phases
 - Core classifier mutation (when changing `crates/comment-checker/src/classify.rs`): `cargo mutants --file crates/comment-checker/src/classify.rs --timeout 90`
 
 ```bash
-# One-shot verification command (with explicit caps)
-CARGO_BUILD_JOBS=4 cargo fmt --check && CARGO_BUILD_JOBS=4 cargo clippy --all-targets -- -D warnings && cargo test -- --test-threads=4
+# One-shot verification command
+cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test --all-targets
 ```
 
-**For classifier changes**, the mutants command above must be run.
-
+**For classifier changes**, the mutants command above must be run:
 ```bash
-# One-shot verification command (with explicit caps)
-CARGO_BUILD_JOBS=4 cargo fmt --check && CARGO_BUILD_JOBS=4 cargo clippy --all-targets -- -D warnings && cargo test -- --test-threads=4
+cargo mutants --file crates/comment-checker/src/classify.rs --timeout 90
 ```
+
 **Rust/Cargo specifics for manifest resolution**: Commands are direct `cargo` invocations (Cargo.toml serves as manifest; no `[scripts]` like package.json). The gate resolves via the Cargo toolchain present in PATH. The instructions surface names these as the verifiable entrypoints.
 
-Keep the gate bounded when changing it. Concurrency multiplies: the runner's task cap times each task's own worker pool. For Cargo, use `CARGO_BUILD_JOBS=4` (or CI equivalent) or `-j` where supported to cap; defaults are safe for this small crate but the gate documents the cap. Prefer the runner's CPU-relative cap. Add a phase only when the check gating it is far cheaper than the phase behind it; never chain independent same-cost checks with `&&`, and never fan out uncapped.
-
+Run checks using full system concurrency (`cargo` and `cargo-test` use host CPU defaults).
+Add a phase only when the check gating it is far cheaper than the phase behind it; never chain independent same-cost checks with `&&`.
 ### Anti-Bypass Rules
 - Run the full one-shot command, not individual tests in isolation.
 - Evidence comes from the current run — never an old CI result or prior session; any failure blocks done, even unrelated-looking ones.

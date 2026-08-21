@@ -11,23 +11,29 @@ import {
 
 const VERSION_RE = /^\d+\.\d+\.\d+(-[A-Za-z0-9.-]+)?$/
 
-// Validated before any write. `$` matches before a trailing newline, so reject
-// one explicitly.
-const version = Deno.env.get('VERSION') ?? ''
-if (!VERSION_RE.test(version) || version.includes('\n')) {
-  console.error(`sync-root-version: invalid VERSION: ${JSON.stringify(version)}`)
-  Deno.exit(1)
-}
-
 const flags = parseCliArgs({
   alias: { 'dry-run': 'dryRun', 'manifest-path': 'manifestPath' },
   boolean: ['dry-run'],
-  string: ['manifest-path'],
+  string: ['manifest-path', 'version'],
 })
 const dryRun = flags.dryRun === true
 const manifestPath = typeof flags.manifestPath === 'string'
   ? resolve(flags.manifestPath)
   : LAUNCHER_MANIFEST_PATH
+
+const original = await Deno.readTextFile(manifestPath)
+const manifest: LauncherManifest = JSON.parse(original)
+
+// Version priority: --version flag -> VERSION env var -> existing manifest.version (bumped by pnpm version)
+const rawVersion = typeof flags.version === 'string'
+  ? flags.version
+  : (Deno.env.get('VERSION') ?? manifest.version ?? '')
+
+if (!VERSION_RE.test(rawVersion) || rawVersion.includes('\n')) {
+  console.error(`sync-root-version: invalid version: ${JSON.stringify(rawVersion)}`)
+  Deno.exit(1)
+}
+const version = rawVersion
 
 const targets: Target[] = JSON.parse(await Deno.readTextFile(TARGETS_PATH))
 if (!Array.isArray(targets) || targets.length !== 5) {
@@ -35,9 +41,6 @@ if (!Array.isArray(targets) || targets.length !== 5) {
   Deno.exit(1)
 }
 
-const original = await Deno.readTextFile(manifestPath)
-const manifest: LauncherManifest = JSON.parse(original)
-manifest.version = version
 // The committed manifest carries no optionalDependencies — pnpm cannot lock
 // unpublished platform packages — so inject the pins at publish time, when they exist.
 manifest.optionalDependencies = Object.fromEntries(
