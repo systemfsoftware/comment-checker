@@ -59,10 +59,18 @@ jobs:
       - name: Build + typecheck (launcher)
         run: pnpm build && pnpm typecheck
 
-      - name: Release scripts lint + matrix agreement gate (deno)
+      - name: Lint GitHub Actions workflows (issue #9)
+        uses: rhysd/actionlint@v1.7.12
+        with:
+          paths: |
+            .github/workflows/ci.yml
+            .github/workflows/release.yml
+
+      - name: Release scripts lint + tests + matrix agreement gate (deno)
         run: |
           cd scripts
           deno task lint
+          deno task test
           deno task check-matrix
 
   mutation:

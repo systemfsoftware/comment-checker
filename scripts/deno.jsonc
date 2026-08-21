@@ -3,12 +3,14 @@
     "@std/assert": "jsr:@std/assert@1.0.19",
     "@std/cli": "jsr:@std/cli@1.0.15",
     "@std/path": "jsr:@std/path@1.1.6",
+    "@std/yaml": "jsr:@std/yaml@1.0.4",
     "@libs/diff": "jsr:@libs/diff@4.0.0"
   },
   "tasks": {
     "manifest:generate": "./tools/generate-platform-manifest.ts",
     "manifest:sync-root": "./tools/sync-root-version.ts",
     "check-matrix": "./tools/check-matrix.ts",
+    "test": "deno test --allow-read .",
     "check:publish": "./tools/check-publish.ts",
     "publish:unpublished": "./tools/publish-and-setup-npm-trust.ts",
     "lint": "deno lint --config ./deno.jsonc ."

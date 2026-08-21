@@ -1,6 +1,7 @@
 #!/usr/bin/env -S deno run --allow-read
 import { resolve } from '@std/path'
 import { parseCliArgs } from '../lib/cli.ts'
+import { matrixRows } from '../lib/matrix-rows.ts'
 import {
   LAUNCHER_MANIFEST_PATH,
   type LauncherManifest,
@@ -115,12 +116,10 @@ async function checkWorkflow(workflowPath: string, targets: Target[]) {
   try {
     await Deno.lstat(workflowPath)
     const content = await Deno.readTextFile(workflowPath)
-    // Each matrix row lists its suffix on the line after target.
-    const workflowPairs = new Map(
-      [...content.matchAll(
-        /^\s*-\s*target:\s*((?:x86_64|aarch64)-[a-z0-9-]+)\s*\n\s*suffix:\s*([a-z0-9-]+)\s*$/gm,
-      )].map((m) => [m[1], m[2]]),
-    )
+    // Typed YAML parse (issue #8): formatting variants (flow style, quoting,
+    // key order) must not change what rows are seen, and malformed YAML must
+    // fail the gate instead of yielding an empty match set.
+    const workflowPairs = new Map(matrixRows(content).map((row) => [row.target, row.suffix]))
     const tablePairs = new Map(targets.map((t) => [t.target, t.suffix]))
     for (const [target, suffix] of tablePairs) {
       if (!workflowPairs.has(target)) {

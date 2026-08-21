@@ -6,7 +6,8 @@
     "jsr:@std/cli@1.0.15": "1.0.15",
     "jsr:@std/internal@^1.0.12": "1.0.14",
     "jsr:@std/internal@^1.0.14": "1.0.14",
-    "jsr:@std/path@1.1.6": "1.1.6"
+    "jsr:@std/path@1.1.6": "1.1.6",
+    "jsr:@std/yaml@1.0.4": "1.0.4"
   },
   "jsr": {
     "@libs/diff@4.0.0": {
@@ -29,6 +30,9 @@
       "dependencies": [
         "jsr:@std/internal@^1.0.14"
       ]
+    },
+    "@std/yaml@1.0.4": {
+      "integrity": "f1e38fa5e110ff8550e938715e52c33347676dd00a1db858e092dd21a9df9941"
     }
   },
   "workspace": {
@@ -36,7 +40,8 @@
       "jsr:@libs/diff@4.0.0",
       "jsr:@std/assert@1.0.19",
       "jsr:@std/cli@1.0.15",
-      "jsr:@std/path@1.1.6"
+      "jsr:@std/path@1.1.6",
+      "jsr:@std/yaml@1.0.4"
     ]
   }
 }

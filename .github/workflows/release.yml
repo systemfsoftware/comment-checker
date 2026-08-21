@@ -19,8 +19,10 @@ on:
 
 permissions: {}
 
+# Keyed on the commit, not the ref: a force-moved tag must run in a fresh
+# lane instead of serializing behind the stale run it replaced (issue #5).
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -44,7 +46,7 @@ jobs:
             runner: ubuntu-24.04-arm
           - target: x86_64-apple-darwin
             suffix: darwin-x64
-            runner: macos-13
+            runner: macos-14
           - target: aarch64-apple-darwin
             suffix: darwin-arm64
             runner: macos-14
@@ -126,11 +128,13 @@ jobs:
         shell: bash
         run: |
           BIN="target/${{ matrix.target }}/release/${BINARY_NAME}"
-          echo '{"tool_name":"Write","tool_input":{"file_path":"src/client.py","content":"# SPDX-License-Identifier: Apache-2.0\ndef load(path):\n    return open(path).read()\n"}}' | "$BIN"
+          printf '%s\n' '{"tool_name":"Write","tool_input":{"file_path":"src/client.py","content":"# SPDX-License-Identifier: Apache-2.0\ndef load(path):\n    return open(path).read()\n"}}' | "$BIN"
           rc=$?
           test "$rc" -eq 0 || { echo "clean payload exited $rc, expected 0" >&2; exit 1; }
-          echo '{"tool_name":"Write","tool_input":{"file_path":"src/load_config.py","content":"def load_config(path):\n    # Parse the config file\n    data = json.load(open(path))\n    # TODO: fix this later\n    return data\n"}}' | "$BIN" >/dev/null 2>&1
+          printf '%s\n' '{"tool_name":"Write","tool_input":{"file_path":"src/load_config.py","content":"def load_config(path):\n    # Parse the config file\n    data = json.load(open(path))\n    # TODO: fix this later\n    return data\n"}}' | "$BIN" >/dev/null 2>&1
           rc=$?
+          # Exit contract (2 = blocked) asserted by
+          # crates/comment-checker/tests/exit_codes.rs (issue #6).
           test "$rc" -eq 2 || { echo "flagged payload exit $rc, expected 2" >&2; exit 1; }
 
       - name: Stage platform package (outside workspace) + record binarySha256
@@ -150,6 +154,10 @@ jobs:
           BIN="target/${{ matrix.target }}/release/${BINARY_NAME}"
           cp "$BIN" "$STAGE/${BINARY_NAME}"
           SHA="$(sha256_of "$STAGE/${BINARY_NAME}")"
+          # Issue #7: persist the digest as a sidecar artifact. The
+          # publish-time cross-check reads this file; without a writer here
+          # the digest guard reads nothing and cannot run.
+          echo "$SHA" > "$RUNNER_TEMP/binary-${{ matrix.suffix }}.sha256"
           deno run \
             --allow-read=scripts/lib/targets.json,npm/packages/comment-checker/package.json \
             --allow-write="$STAGE" \
@@ -160,7 +168,7 @@ jobs:
             --out "$STAGE"
           echo "STAGE=$STAGE" >> "$GITHUB_ENV"
 
-      - name: Upload tar.gz + sha sidecar
+      - name: Bundle tarball (sha sidecar written at staging)
         shell: bash
         run: |
           cd "target/${{ matrix.target }}/release"
@@ -182,7 +190,9 @@ jobs:
 
   publish-npm-main:
     name: Publish root launcher
-    needs: release
+    # After upload-gh-release-assets: the cross-check re-fetches the platform
+    # tarballs from the GitHub release, so they must exist first (issue #7).
+    needs: [release, upload-gh-release-assets]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -205,7 +215,10 @@ jobs:
         shell: bash
         run: |
           DEFAULT_BRANCH="$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)"
-          git fetch origin "$DEFAULT_BRANCH" --depth=1
+          # Full history, not --depth=1: a shallow fetch cannot prove whether
+          # a force-pushed tag commit is an ancestor of the default branch
+          # (issue #3); merge-base below needs the complete DAG.
+          git fetch origin "$DEFAULT_BRANCH"
           git merge-base --is-ancestor "$GITHUB_SHA" "origin/$DEFAULT_BRANCH" || {
             echo "tag commit not an ancestor of $DEFAULT_BRANCH; refusing publish" >&2
             exit 1
@@ -233,7 +246,7 @@ jobs:
           merge-multiple: true
           path: sidecars
 
-      - name: "Gate: every platform package published with table os/cpu/libc"
+      - name: "Gate: every platform package published with table os/cpu/libc + launcher peer"
         shell: bash
         run: |
           # Shape-normalize BOTH sides: npm view reports libc as an array
@@ -241,26 +254,38 @@ jobs:
           # darwin/win32 rows have no libc at all. Comparing through the same
           # normalization (libc as array, absent when null) makes the deep
           # equality meaningful instead of always-true or always-false.
+          # peerDependencies must name the launcher at the same version
+          # (issue #4).
           libc_norm='{os, cpu} + (if (.libc // null) != null then {libc} else {} end)'
+          LAUNCHER_NAME="@systemfsoftware/claude-code-comment-checker"
           SUFFIXES="$(jq -r '.[].suffix' scripts/lib/targets.json)"
           test -n "$SUFFIXES" || { echo "targets.json empty" >&2; exit 1; }
           for SUFFIX in $SUFFIXES; do
-            PKG="@systemfsoftware/claude-code-comment-checker-${SUFFIX}"
-            META="$(npm view "$PKG@$VERSION" version os cpu libc --json)" || {
+            PKG="${LAUNCHER}-${SUFFIX}"
+            META="$(npm view "$PKG@$VERSION" version os cpu libc peerDependencies --json)" || {
               echo "platform package $PKG@$VERSION missing" >&2
               exit 1
             }
             EXPECTED="$(jq -c --arg suffix "$SUFFIX" '.[] | select(.suffix == $suffix) | {os: [.os], cpu: [.cpu]} + (if (.libc // null) != null then {libc: [.libc]} else {} end)' scripts/lib/targets.json)"
-              '.version == $v and ('"$libc_norm"') == $want' >/dev/null || {
-              echo "$PKG@$VERSION mismatch: $(echo "$META" | jq -c '{version, os, cpu, libc}') want $EXPECTED" >&2
+            echo "$META" | jq -e -c \
+              --arg v "$VERSION" \
+              --arg want "$EXPECTED" \
+              --arg launcher "$LAUNCHER_NAME" \
+              '.version == $v and ('"$libc_norm"') == $want and .peerDependencies[$launcher] == $v' \
+              >/dev/null || {
+              echo "$PKG@$VERSION mismatch: $(echo "$META" | jq -c '{version, os, cpu, libc, peerDependencies}') want $EXPECTED + peer $LAUNCHER@$VERSION" >&2
               exit 1
             }
             echo "$SUFFIX ok"
           done
 
-      - name: Cross-check published tarballs vs recorded binary sha
+      - name: Cross-check release + published tarballs vs recorded binary sha
         shell: bash
         run: |
+          # Three-way digest agreement: the GitHub release asset (re-fetched
+          # here, independent of the staging runner), the npm tarball, and the
+          # sidecar recorded at build time (issue #7).
+          #
           # npm registry read-after-write is eventually consistent: the
           # platform publish finished only seconds ago, so a first `npm pack`
           # may still 404. Retry a bounded number of times before failing.
@@ -275,6 +300,22 @@ jobs:
           test -n "$SUFFIXES" || { echo "targets.json empty" >&2; exit 1; }
           for SUFFIX in $SUFFIXES; do
             SHA_RECORDED="$(cat "sidecars/binary-${SUFFIX}.sha256")"
+            TARGET="$(jq -r --arg suffix "$SUFFIX" '.[] | select(.suffix == $suffix) | .target' scripts/lib/targets.json)"
+            test -n "$TARGET" || { echo "no targets.json row for $SUFFIX" >&2; exit 1; }
+            # Issue #7: bind the recorded digest to a source independent of
+            # this runner's staging — the tarball attached to the GitHub
+            # release — before trusting the sidecar against the registry.
+            gh release download "$GITHUB_REF_NAME" \
+              --pattern "comment-checker-${TARGET}.tar.gz" --dir "$RUNNER_TEMP" --clobber
+            rm -rf "$RUNNER_TEMP/release-unpack"
+            mkdir -p "$RUNNER_TEMP/release-unpack"
+            tar -xzf "$RUNNER_TEMP/comment-checker-${TARGET}.tar.gz" -C "$RUNNER_TEMP/release-unpack"
+            BIN_RELEASED="$(find "$RUNNER_TEMP/release-unpack" -type f \( -name 'comment-checker' -o -name 'comment-checker.exe' \) | head -1)"
+            SHA_RELEASED="$(sha256_of "$BIN_RELEASED")"
+            if [ "$SHA_RECORDED" != "$SHA_RELEASED" ]; then
+              echo "release-asset binary sha mismatch for $SUFFIX: recorded $SHA_RECORDED, got $SHA_RELEASED" >&2
+              exit 1
+            fi
             PKG="@systemfsoftware/claude-code-comment-checker-${SUFFIX}"
             TARBALL=""
             for attempt in 1 2 3 4 5; do
@@ -332,11 +373,15 @@ jobs:
             exit 1
           }
           SUFFIXES="$(jq -r '.[].suffix' scripts/lib/targets.json)"
-            echo "$ROOT_META" | jq -e --arg k "@systemfsoftware/claude-code-comment-checker-${SUFFIX}" --arg v "$VERSION" \
+          test -n "$SUFFIXES" || { echo "targets.json empty" >&2; exit 1; }
+          for SUFFIX in $SUFFIXES; do
+            echo "$ROOT_META" | jq -e -c \
+              --arg k "@systemfsoftware/claude-code-comment-checker-${SUFFIX}" --arg v "$VERSION" \
               '.optionalDependencies[$k] == $v' >/dev/null || {
               echo "optional pin missing for $SUFFIX@$VERSION" >&2
               exit 1
             }
+            echo "$SUFFIX pin ok"
           done
 
   upload-gh-release-assets:
