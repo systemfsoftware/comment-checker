@@ -11,11 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+      # Toolchain comes from the repo flake (nix develop): cargo, clippy,
+      # rustfmt, gcc — same versions as every local dev shell.
+      - uses: DeterminateSystems/nix-installer-action@v22
 
-      - name: Cache cargo
+      - name: Cache cargo build
         uses: actions/cache@v4
         with:
           path: |
@@ -23,15 +23,16 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
 
       - name: Format check
-        run: cargo fmt --check
+        run: nix develop -c bash -lc 'CARGO_BUILD_JOBS=4 cargo fmt --check'
 
       - name: Clippy (deny warnings)
-        run: cargo clippy --all-targets -- -D warnings
+        run: nix develop -c bash -lc 'CARGO_BUILD_JOBS=4 cargo clippy --all-targets -- -D warnings'
 
       - name: Test (unit + property + composition + F1)
-        run: cargo test --all-targets
+        run: nix develop -c bash -lc 'cargo test --all-targets -- --test-threads=4'
 
   npm:
     runs-on: ubuntu-latest
@@ -68,20 +69,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Toolchain + cargo-mutants from the repo flake — no cargo install.
+      - uses: DeterminateSystems/nix-installer-action@v22
 
-      - name: Cache cargo
+      # Turbo verdict cache: content-addressed entries keyed by task inputs.
+      # Restore the newest previous save, then save this run's state under a
+      # fresh sha key. Unchanged inputs -> turbo replays the cached verdict
+      # (FULL TURBO) instead of re-running the mutant loop.
+      - name: Cache turbo verdicts
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-            ~/.cargo/bin
-          key: ${{ runner.os }}-mutants-${{ hashFiles('Cargo.lock') }}
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
 
-      - name: Install cargo-mutants
-        run: command -v cargo-mutants || cargo install cargo-mutants --locked
-
-      - name: Mutation gate (core classifier, 100%)
-        run: cargo mutants --file crates/comment-checker/src/classify.rs --timeout 90
+      - name: Mutation gate via turbo (core classifier, 100%)
+        run: nix develop -c bash -lc 'pnpm install --frozen-lockfile && pnpm mutants'
