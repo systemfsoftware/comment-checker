@@ -1,4 +1,9 @@
-import { LAUNCHER_MANIFEST_PATH, type LauncherManifest, type Target, TARGETS_PATH } from './shared.ts'
+import {
+  LAUNCHER_MANIFEST_PATH,
+  type LauncherManifest,
+  type Target,
+  TARGETS_PATH,
+} from './shared.ts'
 
 export interface PackageTarget {
   name: string

@@ -18,6 +18,7 @@ export interface Target {
   os: string
   cpu: string
   libc?: string
+  runner: string
   bin: string
 }
 

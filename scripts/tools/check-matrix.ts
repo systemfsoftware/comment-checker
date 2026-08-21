@@ -14,6 +14,11 @@ import {
 // derived from the table under check.
 const EXPECTED_SUFFIXES = ['linux-x64', 'linux-arm64', 'darwin-x64', 'darwin-arm64', 'win32-x64']
 
+// Known-good hosted runners. The release workflow's per-row runner must match
+// the table's canonical runner AND be one of these — a retired or mistyped
+// label (e.g. macos-13) must fail the gate, not pass it (issue #8 refit).
+const KNOWN_RUNNERS = new Set(['ubuntu-latest', 'ubuntu-24.04-arm', 'macos-14', 'windows-2022'])
+
 const failures: string[] = []
 const fail = (reason: string) => failures.push(reason)
 const note = (message: string) => console.error(`check-matrix: note: ${message}`)
@@ -58,6 +63,13 @@ function checkTable(targets: Target[]) {
     if (entry.suffix !== `${entry.os}-${entry.cpu}`) {
       fail(
         `target ${entry.target}: suffix "${entry.suffix}" must equal os-cpu "${entry.os}-${entry.cpu}"`,
+      )
+    }
+    if (!KNOWN_RUNNERS.has(entry.runner)) {
+      fail(
+        `target ${entry.target}: runner "${entry.runner}" is not a known runner; known are ${
+          [...KNOWN_RUNNERS].join(', ')
+        }`,
       )
     }
     if ((entry.os === 'win32') !== (entry.bin === 'comment-checker.exe')) {
@@ -117,28 +129,36 @@ async function checkWorkflow(workflowPath: string, targets: Target[]) {
     await Deno.lstat(workflowPath)
     const content = await Deno.readTextFile(workflowPath)
     // Typed YAML parse (issue #8): formatting variants (flow style, quoting,
-    // key order) must not change what rows are seen, and malformed YAML must
-    // fail the gate instead of yielding an empty match set.
-    const workflowPairs = new Map(matrixRows(content).map((row) => [row.target, row.suffix]))
-    const tablePairs = new Map(targets.map((t) => [t.target, t.suffix]))
-    for (const [target, suffix] of tablePairs) {
-      if (!workflowPairs.has(target)) {
-        fail(`release.yml does not list release target ${target}`)
-      } else if (workflowPairs.get(target) !== suffix) {
+    // key order) must not change what rows are seen, and any malformed or
+    // empty matrix — or a missing release job — throws inside matrixRows and
+    // fails the gate instead of yielding an empty match set.
+    const workflowRows = matrixRows(content)
+    const tableRows = new Map(targets.map((t) => [t.target, t]))
+    if (workflowRows.length !== targets.length) {
+      fail(
+        `release.yml lists ${workflowRows.length} matrix rows; targets.json has ${targets.length}`,
+      )
+    }
+    for (const row of workflowRows) {
+      const entry = tableRows.get(row.target)
+      if (!entry) {
+        fail(`release.yml lists ${row.target}, which is not a row in targets.json`)
+        continue
+      }
+      if (row.suffix !== entry.suffix) {
         fail(
-          `release.yml lists ${target} with suffix ${
-            workflowPairs.get(target)
-          }, table says ${suffix}`,
+          `release.yml lists ${row.target} with suffix ${row.suffix}, table says ${entry.suffix}`,
+        )
+      }
+      if (row.runner !== entry.runner) {
+        fail(
+          `release.yml lists ${row.target} on runner ${row.runner}, table says ${entry.runner}`,
         )
       }
     }
-    for (const [target, suffix] of workflowPairs) {
-      if (!tablePairs.has(target)) {
-        fail(`release.yml lists ${target}, which is not a row in targets.json`)
-      } else if (suffix !== tablePairs.get(target)) {
-        fail(
-          `release.yml lists ${target} with suffix ${suffix}, table says ${tablePairs.get(target)}`,
-        )
+    for (const entry of targets) {
+      if (!workflowRows.some((row) => row.target === entry.target)) {
+        fail(`release.yml does not list release target ${entry.target}`)
       }
     }
   } catch (error) {
