@@ -11,19 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Stock rust-lang toolchain through rustup — the runner image's Cargo
-      # 1.97 + rustup, pin-aligned via rust-toolchain. fmt/clippy arrive as
-      # registry-installed cargo subcommands (cargo-fmt, cargo-clippy), not
-      # rustup components.
+      # Stock rust-lang toolchain through rustup with clippy and rustfmt components
       - uses: actions-rust-lang/setup-rust-toolchain@0267444136ce4919088f5eae0461f736f21356de # v1
         with:
           toolchain: stable
-
-      - name: Install cargo subcommands (fmt, clippy)
-        run: |
-          cargo install cargo-fmt cargo-clippy
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-
+          components: clippy, rustfmt
       - name: Cache cargo build
         uses: actions/cache@v4
         with:
