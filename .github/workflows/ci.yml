@@ -72,17 +72,30 @@ jobs:
       # Toolchain + cargo-mutants from the repo flake — no cargo install.
       - uses: DeterminateSystems/nix-installer-action@v22
 
-      # Turbo verdict cache: content-addressed entries keyed by task inputs.
-      # Restore the newest previous save, then save this run's state under a
-      # fresh sha key. Unchanged inputs -> turbo replays the cached verdict
-      # (FULL TURBO) instead of re-running the mutant loop.
+      # Turbo verdict cache. The path must mirror turbo.json's `cacheDir`.
+      # Keyed on the mutation gate's input set (the same files the mutants
+      # task hashes): unchanged inputs restore an exact key, which also
+      # suppresses the post-job save; turbo then replays the cached verdict
+      # (FULL TURBO) instead of re-running the mutant loop. The restore-key
+      # prefix picks up the newest previous bag after any input change.
       - name: Cache turbo verdicts
         uses: actions/cache@v4
         with:
           path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ github.sha }}
+          key: turbo-${{ runner.os }}-${{ hashFiles('package.json', 'Cargo.toml', 'Cargo.lock', 'flake.lock', '.cargo/config.toml', 'crates/comment-checker/Cargo.toml', 'crates/comment-checker/src/**', 'crates/comment-checker/tests/**') }}
           restore-keys: |
             turbo-${{ runner.os }}-
+
+      # pnpm store: `pnpm install` runs before turbo can replay anything
+      # (turbo itself comes from node_modules), so the store is cached to
+      # keep that install a fast relink instead of a cold fetch.
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
 
       - name: Mutation gate via turbo (core classifier, 100%)
         run: nix develop -c bash -lc 'pnpm install --frozen-lockfile && pnpm mutants'
