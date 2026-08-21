@@ -1,13 +1,13 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write
+#!/usr/bin/env -S deno run --allow-env=VERSION --allow-read --allow-write
 import { resolve } from '@std/path'
 import { diff } from '@libs/diff'
-import { parseCliArgs } from './cli.ts'
+import { parseCliArgs } from '../lib/cli.ts'
 import {
   LAUNCHER_MANIFEST_PATH,
   type LauncherManifest,
   type Target,
   TARGETS_PATH,
-} from './shared.ts'
+} from '../lib/shared.ts'
 
 const VERSION_RE = /^\d+\.\d+\.\d+(-[A-Za-z0-9.-]+)?$/
 

@@ -52,7 +52,7 @@ bin.
 
 ### Platform package
 One per os-cpu pair (`-linux-x64`, `-darwin-arm64`, …), generated from
-`scripts/release/targets.json`: ships only the compiled binary and its
+`scripts/lib/targets.json`: ships only the compiled binary and its
 manifest (`os`/`cpu`/`libc` fields, no `bin`). The launcher's
 `optionalDependencies` pins all five to the release version.
 

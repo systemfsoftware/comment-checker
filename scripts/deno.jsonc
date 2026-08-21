@@ -6,9 +6,11 @@
     "@libs/diff": "jsr:@libs/diff@4.0.0"
   },
   "tasks": {
-    "manifest:generate": "deno run --allow-read=release/targets.json,../npm/packages/comment-checker/package.json release/generate-platform-manifest.ts",
-    "manifest:sync-root": "deno run --allow-env --allow-read=release/targets.json,../npm/packages/comment-checker/package.json --allow-write=../npm/packages/comment-checker/package.json release/sync-root-version.ts",
-    "check-matrix": "deno run --allow-read=release/targets.json,../npm/packages/comment-checker/package.json,../.github/workflows/release.yml release/check-matrix.ts",
+    "manifest:generate": "./tools/generate-platform-manifest.ts",
+    "manifest:sync-root": "./tools/sync-root-version.ts",
+    "check-matrix": "./tools/check-matrix.ts",
+    "check:publish": "./tools/check-publish.ts",
+    "publish:unpublished": "./tools/publish-and-setup-npm-trust.ts",
     "lint": "deno lint --config ./deno.jsonc ."
   },
   "fmt": {

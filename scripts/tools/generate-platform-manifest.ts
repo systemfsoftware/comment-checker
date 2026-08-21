@@ -1,12 +1,13 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write
 import { join } from '@std/path'
-import { parseCliArgs } from './cli.ts'
+import { parseCliArgs } from '../lib/cli.ts'
+import { buildPlatformManifest } from '../lib/platform-manifest.ts'
 import {
   LAUNCHER_MANIFEST_PATH,
   type LauncherManifest,
   type Target,
   TARGETS_PATH,
-} from './shared.ts'
+} from '../lib/shared.ts'
 
 const TARGETS: Target[] = JSON.parse(await Deno.readTextFile(TARGETS_PATH))
 const LAUNCHER: LauncherManifest = JSON.parse(await Deno.readTextFile(LAUNCHER_MANIFEST_PATH))
@@ -38,26 +39,7 @@ if (!entry) {
   Deno.exit(1)
 }
 
-const pkg: Record<string, unknown> = {
-  name: `${LAUNCHER.name}-${entry.suffix}`,
-  version,
-  description: `${LAUNCHER.name} ${entry.suffix} platform package`,
-  license: 'Apache-2.0',
-  repository: LAUNCHER.repository,
-  os: [entry.os],
-  cpu: [entry.cpu],
-  files: [entry.bin],
-  // No bin field — a platform package's bin would collide with the launcher's
-  // own comment-checker shim.
-  publishConfig: { access: 'public', provenance: true },
-}
-if (entry.libc !== undefined) {
-  pkg.libc = [entry.libc]
-}
-if (binarySha256 !== undefined) {
-  pkg.binarySha256 = binarySha256 as string
-}
-
+const pkg = buildPlatformManifest(LAUNCHER, entry, version, binarySha256)
 const output = JSON.stringify(pkg, null, 2) + '\n'
 
 if (args.dryRun) {

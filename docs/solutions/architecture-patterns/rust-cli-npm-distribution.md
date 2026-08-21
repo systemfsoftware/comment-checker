@@ -2,7 +2,7 @@
 title: Distributing a compiled Rust CLI as per-platform npm packages
 date: 2026-08-17
 category: architecture-patterns
-module: npm distribution (npm/packages/comment-checker + scripts/release + .github/workflows/release.yml)
+module: npm distribution (npm/packages/comment-checker + scripts/lib,tools + .github/workflows/release.yml)
 problem_type: architecture_pattern
 component: tooling
 severity: medium
@@ -39,7 +39,7 @@ five per-platform binary packages. That shape creates two hard constraints:
    launcher manifest that names them in `optionalDependencies` breaks
    `pnpm install --frozen-lockfile` for every developer and CI run. The
    committed manifest must stay clean; the pins are injected at publish time
-   (`scripts/release/sync-root-version.ts:18-22`).
+   (`scripts/lib/sync-root-version.ts:18-22`).
 2. **Six packages by hand is exactly what a human gets wrong.** The pipeline
    must be tag-triggered (version = tag), run the same build → gate → smoke →
    publish sequence on every tag, publish platforms before the root, and fail
@@ -57,7 +57,7 @@ five per-platform binary packages. That shape creates two hard constraints:
    to its directory. Missing package surfaces as a
    typed `BinaryNotFound` naming the package; a spawn-time ENOENT would be a
    corrupt install npm would not have produced.
-2. **One canonical targets table.** `scripts/release/targets.json` is the
+2. **One canonical targets table.** `scripts/lib/targets.json` is the
    single source of truth: five entries, each `{target, suffix, os, cpu,
    libc?, bin}`. Everything else consumes the table instead of re-deriving
    the platform set — the workflow resolves the per-lane binary name with
@@ -159,7 +159,7 @@ export const optionalDepName = (platform: string, arch: string): string =>
   `@systemfsoftware/claude-code-comment-checker-${platform}-${arch}`
 ```
 
-`scripts/release/targets.json` — the table is the platform contract; every
+`scripts/lib/targets.json` — the table is the platform contract; every
 entry carries `os`/`cpu`/`libc` consumed by manifest generation, the
 workflow's binary-name resolution, and the registry gate:
 
@@ -174,7 +174,7 @@ workflow's binary-name resolution, and the registry gate:
 }
 ```
 
-`scripts/release/sync-root-version.ts` — the inject-at-publish move that
+`scripts/lib/sync-root-version.ts` — the inject-at-publish move that
 keeps the committed manifest frozen-install-clean while the published root is
 fully pinned:
 
@@ -184,7 +184,7 @@ manifest.optionalDependencies = Object.fromEntries(
 )
 ```
 
-`scripts/release/check-matrix.ts` — the product policy the table must name:
+`scripts/tools/check-matrix.ts` — the product policy the table must name:
 
 ```ts
 const EXPECTED_SUFFIXES = ['linux-x64', 'linux-arm64', 'darwin-x64', 'darwin-arm64', 'win32-x64']
@@ -212,9 +212,9 @@ digest — the gate that catches a wrong or swapped binary being published.
 ## Related
 
 - Pipeline: `.github/workflows/release.yml`
-- Platform table: `scripts/release/targets.json`
-- Scripts: `scripts/release/generate-platform-manifest.ts`,
-  `scripts/release/sync-root-version.ts`, `scripts/release/check-matrix.ts`
+- Platform table: `scripts/lib/targets.json`
+- Scripts: `scripts/tools/generate-platform-manifest.ts`,
+  `scripts/lib/sync-root-version.ts`, `scripts/tools/check-matrix.ts`
 - Human gate: `docs/publishing/first-release-checklist.md`
 - pnpm#3960 — the constraint that makes listing optional deps a
   frozen-lockfile landmine
