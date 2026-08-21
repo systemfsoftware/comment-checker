@@ -54,6 +54,7 @@
         "$TURBO_ROOT$/Cargo.toml",
         "$TURBO_ROOT$/Cargo.lock",
         "$TURBO_ROOT$/flake.lock",
+        "$TURBO_ROOT$/flake.nix",
         "$TURBO_ROOT$/.cargo/config.toml",
         "$TURBO_ROOT$/crates/comment-checker/Cargo.toml",
         "$TURBO_ROOT$/crates/comment-checker/src/**",

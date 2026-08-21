@@ -73,8 +73,9 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@v22
 
       # Turbo verdict cache. The path must mirror turbo.json's `cacheDir`.
-      # Keyed on the mutation gate's input set (the same files the mutants
-      # task hashes): unchanged inputs restore an exact key, which also
+      # Keyed on the mutation gate's input set plus the files turbo
+      # self-hashes (turbo.json, the npm package.json carrying the gate
+      # script): unchanged inputs restore an exact key, which also
       # suppresses the post-job save; turbo then replays the cached verdict
       # (FULL TURBO) instead of re-running the mutant loop. The restore-key
       # prefix picks up the newest previous bag after any input change.
@@ -82,9 +83,23 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ hashFiles('package.json', 'Cargo.toml', 'Cargo.lock', 'flake.lock', '.cargo/config.toml', 'crates/comment-checker/Cargo.toml', 'crates/comment-checker/src/**', 'crates/comment-checker/tests/**') }}
+          key: turbo-${{ runner.os }}-${{ hashFiles('package.json', 'Cargo.toml', 'Cargo.lock', 'flake.lock', 'flake.nix', '.cargo/config.toml', 'crates/comment-checker/Cargo.toml', 'crates/comment-checker/src/**', 'crates/comment-checker/tests/**', 'turbo.json', 'npm/packages/comment-checker/package.json') }}
           restore-keys: |
             turbo-${{ runner.os }}-
+
+      # Cargo build state for the turbo-miss path (any input change
+      # recompiles). Keyed on Cargo.lock + flake.lock (deps + toolchain);
+      # the shared `cargo-` restore prefix also picks up bags the gate
+      # job saved under the same namespace.
+      - name: Cache cargo build (mutants miss path)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-mut-${{ hashFiles('Cargo.lock', 'flake.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
 
       # pnpm store: `pnpm install` runs before turbo can replay anything
       # (turbo itself comes from node_modules), so the store is cached to
@@ -98,4 +113,4 @@ jobs:
             pnpm-store-${{ runner.os }}-
 
       - name: Mutation gate via turbo (core classifier, 100%)
-        run: nix develop -c bash -lc 'pnpm install --frozen-lockfile && pnpm mutants'
+        run: nix develop -c bash -lc 'pnpm install --frozen-lockfile && CARGO_BUILD_JOBS=4 pnpm mutants'
