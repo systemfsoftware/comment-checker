@@ -20,7 +20,8 @@
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc -b",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "mutants": "cd ../.. && cargo mutants --file crates/comment-checker/src/classify.rs --timeout 90"
   },
   "devDependencies": {
     "@effect/platform-node": "4.0.0-rc.108",

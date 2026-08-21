@@ -1,5 +1,6 @@
 {
   "$schema": "https://v2-10-1.turborepo.dev/schema.json",
+  "cacheDir": ".turbo/cache",
   "tasks": {
     "build": {
       "outputLogs": "new-only",
@@ -43,6 +44,25 @@
         "OXLINT_FORMAT",
         "AGENT",
         "GITHUB_ACTIONS"
+      ],
+      "cache": true
+    },
+    "mutants": {
+      "outputLogs": "new-only",
+      "inputs": [
+        "$TURBO_ROOT$/package.json",
+        "$TURBO_ROOT$/Cargo.toml",
+        "$TURBO_ROOT$/Cargo.lock",
+        "$TURBO_ROOT$/flake.lock",
+        "$TURBO_ROOT$/flake.nix",
+        "$TURBO_ROOT$/.cargo/config.toml",
+        "$TURBO_ROOT$/crates/comment-checker/Cargo.toml",
+        "$TURBO_ROOT$/crates/comment-checker/src/**",
+        "$TURBO_ROOT$/crates/comment-checker/tests/**"
+      ],
+      "outputs": [],
+      "env": [
+        "CARGO_BUILD_JOBS"
       ],
       "cache": true
     }

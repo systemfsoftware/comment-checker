@@ -11,11 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+      # Toolchain comes from the repo flake (nix develop): cargo, clippy,
+      # rustfmt, gcc — same versions as every local dev shell.
+      - uses: DeterminateSystems/nix-installer-action@v22
 
-      - name: Cache cargo
+      - name: Cache cargo build
         uses: actions/cache@v4
         with:
           path: |
@@ -23,15 +23,20 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
 
+      # No `bash -l`: login shells re-source runner profiles which re-prepend
+      # ~/.cargo/bin ahead of the dev shell, and the rustup shim then hijacks
+      # the toolchain (observed: rustup updated stable mid-build, removed
+      # rust-std, E0463). `nix develop -c` already exports the full PATH.
       - name: Format check
-        run: cargo fmt --check
+        run: nix develop -c bash -c 'CARGO_BUILD_JOBS=4 cargo fmt --check'
 
       - name: Clippy (deny warnings)
-        run: cargo clippy --all-targets -- -D warnings
+        run: nix develop -c bash -c 'CARGO_BUILD_JOBS=4 cargo clippy --all-targets -- -D warnings'
 
       - name: Test (unit + property + composition + F1)
-        run: cargo test --all-targets
+        run: nix develop -c bash -c 'cargo test --all-targets -- --test-threads=4'
 
   npm:
     runs-on: ubuntu-latest
@@ -68,20 +73,48 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Toolchain + cargo-mutants from the repo flake — no cargo install.
+      - uses: DeterminateSystems/nix-installer-action@v22
 
-      - name: Cache cargo
+      # Turbo verdict cache. The path must mirror turbo.json's `cacheDir`.
+      # Keyed on the mutation gate's input set plus the files turbo
+      # self-hashes (turbo.json, the npm package.json carrying the gate
+      # script): unchanged inputs restore an exact key, which also
+      # suppresses the post-job save; turbo then replays the cached verdict
+      # (FULL TURBO) instead of re-running the mutant loop. The restore-key
+      # prefix picks up the newest previous bag after any input change.
+      - name: Cache turbo verdicts
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ hashFiles('package.json', 'Cargo.toml', 'Cargo.lock', 'flake.lock', 'flake.nix', '.cargo/config.toml', 'crates/comment-checker/Cargo.toml', 'crates/comment-checker/src/**', 'crates/comment-checker/tests/**', 'turbo.json', 'npm/packages/comment-checker/package.json') }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      # Cargo build state for the turbo-miss path (any input change
+      # recompiles). Keyed on Cargo.lock + flake.lock (deps + toolchain);
+      # the shared `cargo-` restore prefix also picks up bags the gate
+      # job saved under the same namespace.
+      - name: Cache cargo build (mutants miss path)
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-            ~/.cargo/bin
-          key: ${{ runner.os }}-mutants-${{ hashFiles('Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-mut-${{ hashFiles('Cargo.lock', 'flake.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
 
-      - name: Install cargo-mutants
-        run: command -v cargo-mutants || cargo install cargo-mutants --locked
+      # pnpm store: `pnpm install` runs before turbo can replay anything
+      # (turbo itself comes from node_modules), so the store is cached to
+      # keep that install a fast relink instead of a cold fetch.
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
 
-      - name: Mutation gate (core classifier, 100%)
-        run: cargo mutants --file crates/comment-checker/src/classify.rs --timeout 90
+      - name: Mutation gate via turbo (core classifier, 100%)
+        run: nix develop -c bash -c 'pnpm install --frozen-lockfile && CARGO_BUILD_JOBS=4 pnpm mutants'
