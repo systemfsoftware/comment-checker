@@ -1,13 +1,13 @@
 #!/usr/bin/env -S deno run --allow-read
 import { resolve } from '@std/path'
-import { parseCliArgs } from './cli.ts'
+import { parseCliArgs } from '../lib/cli.ts'
 import {
   LAUNCHER_MANIFEST_PATH,
   type LauncherManifest,
   RELEASE_WORKFLOW_PATH,
   type Target,
   TARGETS_PATH,
-} from './shared.ts'
+} from '../lib/shared.ts'
 
 // The product platform set: a known list the table must name, not a copy
 // derived from the table under check.

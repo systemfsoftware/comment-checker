@@ -53,10 +53,8 @@ Releases are tag-triggered: pushing a tag `vX.Y.Z` to `main` runs
 all five target binaries, publishes the five platform packages and then the
 root launcher — all with npm OIDC trusted publishing and provenance, no static
 tokens in CI. The exact step sequence and per-package trusted-publisher bindings are documented
-in the release plan
-(`docs/plans/2026-08-17-001-feat-npm-distribution-release-plan.md`) and the
-first-release checklist (`docs/publishing/first-release-checklist.md`).
-
+in the release plan (`docs/plans/2026-08-17-001-feat-npm-distribution-release-plan.md`)
+and automated via `cd scripts && deno task publish:unpublished`.
 To release:
 
 1. Create the six [npm trusted-publisher
