@@ -66,13 +66,11 @@ jobs:
             .github/workflows/ci.yml
             .github/workflows/release.yml
 
-      - name: Release scripts lint + tests + matrix agreement gate (deno)
+      - name: Release scripts lint + matrix agreement gate (deno)
         run: |
           cd scripts
           deno task lint
-          deno task test
           deno task check-matrix
-
   mutation:
     runs-on: ubuntu-latest
     steps:

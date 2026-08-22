@@ -25,10 +25,10 @@ if (!row) {
 const binPath = `${binDir}/${row.bin}`
 
 const cleanPayload =
-  '{"tool_name":"Write","tool_input":{"file_path":"src/client.py","content":"# SPDX-License-Identifier: Apache-2.0\ndef load(path):\n    return open(path).read()\n"}}'
+  '{"tool_name":"Write","tool_input":{"file_path":"src/client.py","content":"# SPDX-License-Identifier: Apache-2.0\\ndef load(path):\\n    return open(path).read()\\n"}}'
 
 const flaggedPayload =
-  '{"tool_name":"Write","tool_input":{"file_path":"src/load_config.py","content":"def load_config(path):\n    # TODO: fix this later\n    return json.load(open(path))\n"}}'
+  '{"tool_name":"Write","tool_input":{"file_path":"src/load_config.py","content":"def load_config(path):\\n    # TODO: fix this later\\n    return json.load(open(path))\\n"}}'
 
 async function runWithInput(bin: string, payload: string): Promise<number> {
   const cmd = new Deno.Command(bin, {
