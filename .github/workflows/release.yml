@@ -1,17 +1,3 @@
-# Release pipeline: tag-triggered publish of the five per-platform binary
-# packages plus the root launcher, all with npm OIDC provenance (no static
-# tokens). Version comes only from the tag (KTD5). The root launcher is
-# published FIRST so the platform packages' exact peerDependencies
-# (launcher@VERSION) always resolve; a final verify job re-checks metadata,
-# digests and pins only after every publish and the GitHub-release upload.
-#
-# Fork safety: `push: tags` — only users with push access can push tags.
-# pull_request_target is intentionally not used. The npm trusted-publisher
-# record binds workflow filename + environment, not tag patterns; the
-# `on: refs/tags/v*` filter is the tag gate.
-#
-# Note: release flows from tags only; ci.yml gates the default branch.
-
 name: Release
 
 on:
@@ -21,19 +7,11 @@ on:
 
 permissions: {}
 
-# Keyed on the tag ref, not the commit: a force-moved tag re-enters the same
-# group and cancels the stale run it replaces (fresh lane for the new commit,
-# issue #5 refit); two different tags are different groups (separate
-# versions); two runs of the SAME tag can never publish the same version
-# twice because cancel-in-progress: true kills the earlier run.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # One job per target in the matrix: build, gate, smoke, stage, upload. The
-  # platform publish itself happens AFTER the root launcher exists
-  # (publish-platform-packages job) so peerDependencies resolve.
   release:
     name: release-${{ matrix.suffix }}
     runs-on: ${{ matrix.runner }}
@@ -62,26 +40,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      # KTD2: the binary name comes from the canonical table, not a second
-      # copy of the win32->.exe rule.
-      - name: Resolve binary name from table
-        shell: bash
-        run: |
-          BINARY_NAME="$(jq -r --arg target "${{ matrix.target }}" '.[] | select(.target == $target) | .bin' scripts/lib/targets.json)"
-          test -n "$BINARY_NAME" || {
-            echo "target ${{ matrix.target }} missing from scripts/lib/targets.json" >&2
-            exit 1
-          }
-          echo "BINARY_NAME=$BINARY_NAME" >> "$GITHUB_ENV"
-
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        uses: actions-rust-lang/setup-rust-toolchain@0267444136ce4919088f5eae0461f736f21356de # v1
         with:
+          toolchain: stable
           targets: ${{ matrix.target }}
 
       - name: Linux arm64 cross-linker
-        # Only needed when building aarch64 from an x64 runner. The native
-        # ubuntu-24.04-arm runner targets aarch64 without a cross toolchain.
         if: matrix.target == 'aarch64-unknown-linux-gnu' && matrix.runner == 'ubuntu-latest'
         shell: bash
         run: |
@@ -105,65 +70,28 @@ jobs:
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Install Deno (release scripts)
+      - name: Install Deno
         uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
 
-      - name: "Gate: check-matrix (table vs workflow agreement)"
-        run: |
-          deno run --allow-read=scripts/lib/targets.json,npm/packages/comment-checker/package.json,.github/workflows/release.yml scripts/tools/check-matrix.ts
-      - name: "Gate: binary exists"
-        shell: bash
-        run: |
-          test -f "target/${{ matrix.target }}/release/${BINARY_NAME}"
+      - name: "Gate: check-matrix"
+        run: deno run --allow-read scripts/tools/check-matrix.ts
 
       - name: "Gate: binary smoke tests"
-        shell: bash
-        run: |
-          BIN="target/${{ matrix.target }}/release/${BINARY_NAME}"
-          printf '%s\n' '{"tool_name":"Write","tool_input":{"file_path":"src/client.py","content":"# SPDX-License-Identifier: Apache-2.0\ndef load(path):\n    return open(path).read()\n"}}' | "$BIN"
-          rc=$?
-          test "$rc" -eq 0 || { echo "clean payload exited $rc, expected 0" >&2; exit 1; }
-          printf '%s\n' '{"tool_name":"Write","tool_input":{"file_path":"src/load_config.py","content":"def load_config(path):\n    # TODO: fix this later\n    return json.load(open(path))\n"}}' | "$BIN" >/dev/null 2>&1
-          rc=$?
-          # Exit contract (2 = blocked) asserted by
-          # crates/comment-checker/tests/exit_codes.rs (issue #6) and pinned
-          # by scripts/tools/release-smoke.test.ts against this exact payload.
-          test "$rc" -eq 2 || { echo "smoke payload exited $rc, expected 2" >&2; exit 1; }
+        run: deno run --allow-run --allow-read scripts/tools/run-binary-smoke.ts --target ${{ matrix.target }} --bin-dir target/${{ matrix.target }}/release
 
-      - name: Stage platform package (outside workspace) + record binarySha256
-        shell: bash
+      - name: Stage platform package
         run: |
-          # Portable sha256: sha256sum (Linux/Windows Git Bash), else shasum
-          # (macOS). Must agree with the cross-check step's digest.
-          sha256_of() {
-            if command -v sha256sum >/dev/null 2>&1; then
-              sha256sum "$1" | cut -d' ' -f1
-            else
-              shasum -a 256 "$1" | cut -d' ' -f1
-            fi
-          }
-          STAGE="$RUNNER_TEMP/platform-${{ matrix.suffix }}"
-          mkdir -p "$STAGE"
-          BIN="target/${{ matrix.target }}/release/${BINARY_NAME}"
-          cp "$BIN" "$STAGE/${BINARY_NAME}"
-          SHA="$(sha256_of "$STAGE/${BINARY_NAME}")"
-          # Issue #7: persist the digest as a sidecar artifact. The
-          # verify-release cross-check reads this file; without a writer here
-          # the digest guard reads nothing and cannot run.
-          echo "$SHA" > "$RUNNER_TEMP/binary-${{ matrix.suffix }}.sha256"
-          deno run \
-            --allow-read=scripts/lib/targets.json,npm/packages/comment-checker/package.json \
-            --allow-write="$STAGE" \
-            scripts/tools/generate-platform-manifest.ts \
-            --suffix "${{ matrix.suffix }}" \
-            --version "${GITHUB_REF#refs/tags/v}" \
-            --binary-sha256 "$SHA" \
-            --out "$STAGE"
-          echo "STAGE=$STAGE" >> "$GITHUB_ENV"
+          deno run --allow-read --allow-write scripts/tools/stage-platform-package.ts \
+            --target ${{ matrix.target }} \
+            --suffix ${{ matrix.suffix }} \
+            --version ${{ github.ref_name }} \
+            --stage ${{ runner.temp }}/platform-${{ matrix.suffix }} \
+            --bin-dir target/${{ matrix.target }}/release
 
-      - name: Bundle tarball (sha sidecar written at staging)
+      - name: Bundle tarball
         shell: bash
         run: |
+          BINARY_NAME="$(jq -r --arg target "${{ matrix.target }}" '.[] | select(.target == $target) | .bin' scripts/lib/targets.json)"
           cd "target/${{ matrix.target }}/release"
           tar -czf "$RUNNER_TEMP/comment-checker-${{ matrix.target }}.tar.gz" "${BINARY_NAME}"
 
@@ -173,18 +101,15 @@ jobs:
           name: release-${{ matrix.suffix }}
           path: |
             ${{ runner.temp }}/comment-checker-${{ matrix.target }}.tar.gz
-            ${{ runner.temp }}/binary-${{ matrix.suffix }}.sha256
+            ${{ runner.temp }}/platform-${{ matrix.suffix }}/binarySha256
 
-      - name: Upload staged platform package (published by publish-platform-packages)
+      - name: Upload staged platform package
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: platform-stage-${{ matrix.suffix }}
           path: ${{ runner.temp }}/platform-${{ matrix.suffix }}
           if-no-files-found: error
 
-  # The root launcher must exist at VERSION before any platform package that
-  # pins it as an exact peerDependency is published (issue #4 resolver
-  # contract). Root publish happens here, BEFORE the platforms.
   publish-root:
     name: Publish root launcher
     needs: release
@@ -196,71 +121,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: "Tag gate: derive VERSION from tag"
-        shell: bash
-        run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
-            echo "invalid tag semver: '$VERSION'" >&2
-            exit 1
-          fi
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-
-      - name: "Tag gate: commit reachable from default branch"
-        shell: bash
-        run: |
-          DEFAULT_BRANCH="$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)"
-          # Full history, not --depth=1: a shallow fetch cannot prove whether
-          # a force-pushed tag commit is an ancestor of the default branch
-          # (issue #3); merge-base below needs the complete DAG.
-          git fetch origin "$DEFAULT_BRANCH"
-          git merge-base --is-ancestor "$GITHUB_SHA" "origin/$DEFAULT_BRANCH" || {
-            echo "tag commit not an ancestor of $DEFAULT_BRANCH; refusing publish" >&2
-            exit 1
-          }
-
-      - name: Setup Node 24 (npm >= 11.5.1 for trusted publishing)
+      - name: Setup Node 24
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-          # No NODE_AUTH_TOKEN — OIDC trusted publishing only.
 
       - name: Install pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 11.21.0
 
-      - name: Install Deno (release scripts)
+      - name: Install Deno
         uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
 
-      - name: Build launcher (frozen)
+      - name: Build launcher
         run: |
           pnpm install --frozen-lockfile --registry https://registry.npmjs.org
           pnpm -r build
 
-      - name: Sync root version + optionalDependencies from tag
-        shell: bash
-        run: |
-          # --allow-env required: VERSION arrives via the environment (KTD5:
-          # the git tag is the single version source). The deno.jsonc
-          # workspace root pins in optionalDependencies are injected here.
-          VERSION="$VERSION" deno run \
-            --allow-env=VERSION \
-            --allow-read=scripts/lib/targets.json,npm/packages/comment-checker/package.json \
-            --allow-write=npm/packages/comment-checker/package.json \
-            scripts/tools/sync-root-version.ts
-      - name: Publish root launcher (OIDC provenance)
-        shell: bash
-        run: |
-          cd npm/packages/comment-checker
-          pnpm publish --provenance --access public --no-git-checks
+      - name: Sync root version
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: deno run --allow-env=VERSION --allow-read --allow-write scripts/tools/sync-root-version.ts
 
-  # Now that launcher@VERSION is on the registry the platform packages can be
-  # published (their peerDependencies resolve). Each staged package came from
-  # a matrix runner; re-uploaded as platform-stage-* artifacts.
+      - name: Publish root launcher
+        run: pnpm --filter @systemfsoftware/claude-code-comment-checker publish --provenance --access public --no-git-checks
+
   publish-platforms:
-    name: Publish platform packages (after root)
+    name: Publish platform packages
     needs: publish-root
     runs-on: ubuntu-latest
     permissions:
@@ -270,7 +159,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Setup Node 24 (npm >= 11.5.1 for trusted publishing)
+      - name: Setup Node 24
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
@@ -281,31 +170,20 @@ jobs:
         with:
           version: 11.21.0
 
+      - name: Install Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
+
       - name: Download staged platform packages
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: platform-stage-*
           path: stages
 
-      - name: Publish platform packages (OIDC provenance)
-        shell: bash
-        run: |
-          COUNT="$(find stages -mindepth 1 -maxdepth 1 -type d | wc -l)"
-          test "$COUNT" -eq 5 || {
-            echo "expected 5 staged platform packages, found $COUNT" >&2
-            exit 1
-          }
-          for STAGE in stages/*/; do
-            [ -d "$STAGE" ] || continue
-            (cd "$STAGE" && pnpm publish --provenance --access public --no-git-checks) || exit 1
-          done
-          echo "all platform packages published"
+      - name: Publish platform packages
+        run: deno run --allow-run --allow-read scripts/tools/publish-platform-stages.ts
 
-  # Separate-verify job: the final gate. Runs the metadata gate, the
-  # three-way digest cross-check, and the root pin check AFTER every publish
-  # and after the GitHub release exists, so a failure means a real mismatch.
   verify-release:
-    name: Verify release (metadata + digests + pins)
+    name: Verify release
     needs: [publish-platforms, upload-gh-release-assets]
     runs-on: ubuntu-latest
     permissions:
@@ -314,11 +192,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Setup Node 24 (npm view/pack)
+      - name: Setup Node 24
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+
+      - name: Install Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
 
       - name: Download recorded binary sha sidecars
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -327,153 +208,22 @@ jobs:
           merge-multiple: true
           path: sidecars
 
-      - name: "Gate: every platform package with table os/cpu/libc + launcher peer"
-        shell: bash
-        run: |
-          # Shape-normalize BOTH sides: npm view reports libc as an array
-          # ("libc":["glibc"]) while the table stores a bare string, and
-          # darwin/win32 rows never carry libc. Comparing through the same
-          # normalization (libc as array, absent when null) makes the deep
-          # equality meaningful instead of always-false against a string
-          # (expectation is passed via --argjson so it compares as an object).
-          # peerDependencies must name the launcher at the same version.
-          libc_norm='{os, cpu} + (if (.libc // null) != null then {libc} else {} end)'
-          LAUNCHER_NAME="@systemfsoftware/claude-code-comment-checker"
-          VERSION="${GITHUB_REF#refs/tags/v}"
-          test -n "$LAUNCHER_NAME" || { echo "LAUNCHER_NAME empty" >&2; exit 1; }
-          test -n "$VERSION" || { echo "VERSION empty (ref: $GITHUB_REF)" >&2; exit 1; }
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          SUFFIXES="$(jq -r '.[].suffix' scripts/lib/targets.json)"
-          test -n "$SUFFIXES" || { echo "targets.json empty" >&2; exit 1; }
-          for SUFFIX in $SUFFIXES; do
-            PKG="${LAUNCHER_NAME}-${SUFFIX}"
-            META="$(npm view "$PKG@$VERSION" version os cpu libc peerDependencies --json)" || {
-              echo "platform package $PKG@$VERSION missing" >&2
-              exit 1
-            }
-            EXPECTED="$(jq -c --arg suffix "$SUFFIX" '.[] | select(.suffix == $suffix) | {os: [.os], cpu: [.cpu]} + (if (.libc // null) != null then {libc: [.libc]} else {} end)' scripts/lib/targets.json)"
-            test -n "$EXPECTED" || { echo "no targets.json row for suffix $SUFFIX" >&2; exit 1; }
-            echo "$META" | jq -e -c \
-              --arg v "$VERSION" \
-              --argjson want "$EXPECTED" \
-              --arg launcher "$LAUNCHER_NAME" \
-              '.version == $v and ('"$libc_norm"') == $want and .peerDependencies[$launcher] == $v' \
-              >/dev/null || {
-              echo "$PKG@$VERSION mismatch: $(echo "$META" | jq -c '{version, os, cpu, libc, peerDependencies}') want $EXPECTED + peer $LAUNCHER@$VERSION" >&2
-              exit 1
-            }
-            echo "$SUFFIX ok"
-          done
+      - name: "Gate: verify platform metadata"
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: deno run --allow-run --allow-read --allow-env scripts/tools/verify-platform-metadata.ts
 
-      - name: "Cross-check: release + published tarballs vs recorded binary sha"
-        shell: bash
-        run: |
-          # Three-way digest agreement: the GitHub release asset (re-fetched
-          # here, independent of the staging runner), the npm tarball, and the
-          # sidecar recorded at build time (issue #7).
-          #
-          # npm registry read-after-write is eventually consistent: the
-          # platform publish finished only seconds ago, so a first `npm pack`
-          # or `gh release download` may still fail. Both are retried a
-          # bounded number of times before failing.
-          set -euo pipefail
-          sha256_of() {
-            if command -v sha256sum >/dev/null 2>&1; then
-              sha256sum "$1" | cut -d' ' -f1
-            else
-              shasum -a 256 "$1" | cut -d' ' -f1
-            fi
-          }
-          SUFFIXES="$(jq -r '.[].suffix' scripts/lib/targets.json)"
-          test -n "$SUFFIXES" || { echo "targets.json empty" >&2; exit 1; }
-          for SUFFIX in $SUFFIXES; do
-            SHA_RECORDED="$(cat "sidecars/binary-${SUFFIX}.sha256")"
-            test -s "sidecars/binary-${SUFFIX}.sha256" || {
-              echo "sidecar missing/empty for $SUFFIX" >&2
-              exit 1
-            }
-            TARGET="$(jq -r --arg suffix "$SUFFIX" '.[] | select(.suffix == $suffix) | .target' scripts/lib/targets.json)"
-            test -n "$TARGET" || { echo "no targets.json row for $SUFFIX" >&2; exit 1; }
-            # Issue #7 refit: bind the recorded digest to a source independent
-            # of this runner's staging — the tarball attached to the GitHub
-            # release — before trusting the sidecar against the registry.
-            for attempt in 1 2 3 4 5; do
-              gh release download "$GITHUB_REF_NAME" \
-                --pattern "comment-checker-${TARGET}.tar.gz" --dir "$RUNNER_TEMP" --clobber && break
-              echo "gh release download $SUFFIX attempt $attempt/5 failed; retrying" >&2
-              sleep 5
-            done
-            test -s "$RUNNER_TEMP/comment-checker-${TARGET}.tar.gz" || {
-              echo "release asset missing for $SUFFIX after 5 attempts" >&2
-              exit 1
-            }
-            rm -rf "$RUNNER_TEMP/release-unpack"
-            mkdir -p "$RUNNER_TEMP/release-unpack"
-            tar -xzf "$RUNNER_TEMP/comment-checker-${TARGET}.tar.gz" -C "$RUNNER_TEMP/release-unpack"
-            MATCH_COUNT="$(find "$RUNNER_TEMP/release-unpack" -type f \( -name 'comment-checker' -o -name 'comment-checker.exe' \) | wc -l)"
-            test "$MATCH_COUNT" -eq 1 || {
-              echo "expected exactly one binary in release asset for $SUFFIX, found $MATCH_COUNT" >&2
-              exit 1
-            }
-            BIN_RELEASED="$(find "$RUNNER_TEMP/release-unpack" -type f \( -name 'comment-checker' -o -name 'comment-checker.exe' \))"
-            test -s "$BIN_RELEASED" || { echo "release binary empty for $SUFFIX" >&2; exit 1; }
-            SHA_RELEASED="$(sha256_of "$BIN_RELEASED")"
-            if [ "$SHA_RECORDED" != "$SHA_RELEASED" ]; then
-              echo "release-asset binary sha mismatch for $SUFFIX: recorded $SHA_RECORDED, got $SHA_RELEASED" >&2
-              exit 1
-            fi
-            PKG="@systemfsoftware/claude-code-comment-checker-${SUFFIX}"
-            TARBALL=""
-            for attempt in 1 2 3 4 5; do
-              TARBALL="$(npm pack "$PKG@${VERSION}" --pack-destination "$RUNNER_TEMP" 2>/dev/null | tail -1)"
-              if [ -n "$TARBALL" ] && [ -f "$RUNNER_TEMP/$TARBALL" ]; then
-                break
-              fi
-              echo "npm pack $PKG@$VERSION attempt $attempt/5 failed; retrying" >&2
-              TARBALL=""
-              sleep 5
-            done
-            if [ -z "$TARBALL" ]; then
-              echo "$PKG@$VERSION not retrievable from registry after 5 attempts" >&2
-              exit 1
-            fi
-            rm -rf "$RUNNER_TEMP/unpack"
-            mkdir -p "$RUNNER_TEMP/unpack"
-            tar -xzf "$RUNNER_TEMP/$TARBALL" -C "$RUNNER_TEMP/unpack"
-            MATCH_COUNT="$(find "$RUNNER_TEMP/unpack" -type f \( -name 'comment-checker' -o -name 'comment-checker.exe' \) | wc -l)"
-            test "$MATCH_COUNT" -eq 1 || {
-              echo "expected exactly one binary in npm tarball for $SUFFIX, found $MATCH_COUNT" >&2
-              exit 1
-            }
-            BIN="$(find "$RUNNER_TEMP/unpack" -type f \( -name 'comment-checker' -o -name 'comment-checker.exe' \))"
-            test -s "$BIN" || { echo "published binary empty for $SUFFIX" >&2; exit 1; }
-            SHA_PUBLISHED="$(sha256_of "$BIN")"
-            if [ "$SHA_RECORDED" != "$SHA_PUBLISHED" ]; then
-              echo "binary sha mismatch for $SUFFIX: recorded $SHA_RECORDED, got $SHA_PUBLISHED" >&2
-              exit 1
-            fi
-            echo "$SUFFIX ok"
-          done
+      - name: "Gate: verify release digests"
+        env:
+          VERSION: ${{ github.ref_name }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: deno run --allow-run --allow-read --allow-write --allow-env scripts/tools/verify-release-digests.ts
 
-      - name: "Verify root publish + exact pins"
-        shell: bash
-        run: |
-          ROOT_META="$(npm view "@systemfsoftware/claude-code-comment-checker@$VERSION" version optionalDependencies --json)"
-          echo "$ROOT_META" | jq -e -c --arg v "$VERSION" '.version == $v' >/dev/null || {
-            echo "root version mismatch: $(echo "$ROOT_META" | jq -c '.version')" >&2
-            exit 1
-          }
-          SUFFIXES="$(jq -r '.[].suffix' scripts/lib/targets.json)"
-          test -n "$SUFFIXES" || { echo "targets.json empty" >&2; exit 1; }
-          for SUFFIX in $SUFFIXES; do
-            echo "$ROOT_META" | jq -e -c \
-              --arg k "@systemfsoftware/claude-code-comment-checker-${SUFFIX}" --arg v "$VERSION" \
-              '.optionalDependencies[$k] == $v' >/dev/null || {
-              echo "optional pin missing for $SUFFIX@$VERSION" >&2
-              exit 1
-            }
-            echo "$SUFFIX pin ok"
-          done
+      - name: "Gate: verify root publish"
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: deno run --allow-run --allow-read --allow-env scripts/tools/verify-root-publish.ts
 
   upload-gh-release-assets:
     needs: release

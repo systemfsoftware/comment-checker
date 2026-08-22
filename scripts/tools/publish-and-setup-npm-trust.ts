@@ -29,20 +29,20 @@ const hasOnly = Object.keys(selectedOnly).length > 0
 const registry = Deno.env.get('NPM_REGISTRY') ?? 'https://registry.npmjs.org'
 
 const repoRoot = new TextDecoder().decode(
-  new Deno.Command('git', { args: ['rev-parse', '--show-toplevel'] }).outputSync().stdout,
+  (await new Deno.Command('git', { args: ['rev-parse', '--show-toplevel'] }).output()).stdout,
 ).trim()
 
-const slug = remoteSlugFromRepo(repoRoot)
+const slug = await remoteSlugFromRepo(repoRoot)
 const { launcher, packages } = await readDistributionSet()
 
 const targetPackages = packages.filter((p) => !hasOnly || selectedOnly[p.name] === true)
 
 function logLine(msg: string) {
-  Deno.stdout.writeSync(new TextEncoder().encode(`${msg}\n`))
+  console.log(msg)
 }
 
 function logError(msg: string) {
-  Deno.stderr.writeSync(new TextEncoder().encode(`ERROR: ${msg}\n`))
+  console.error(`ERROR: ${msg}`)
 }
 
 async function runInteractive(args: string[], cwd: string): Promise<boolean> {

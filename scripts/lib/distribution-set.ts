@@ -39,13 +39,13 @@ export async function readDistributionSet(): Promise<{
   return { launcher, targets, packages }
 }
 
-export function remoteSlugFromRepo(repoRoot: string): string {
+export async function remoteSlugFromRepo(repoRoot: string): Promise<string> {
   const cmd = new Deno.Command('git', {
     args: ['-C', repoRoot, 'remote', 'get-url', 'origin'],
     stdout: 'piped',
     stderr: 'piped',
   })
-  const res = cmd.outputSync()
+  const res = await cmd.output()
   if (!res.success) {
     const err = new TextDecoder().decode(res.stderr).trim()
     throw new Error(`cannot read origin remote: ${err}`)

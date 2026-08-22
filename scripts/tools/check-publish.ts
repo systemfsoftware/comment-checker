@@ -66,17 +66,15 @@ for (const pkg of packages) {
 
 if (jsonMode) {
   for (const item of evaluations) {
-    Deno.stdout.writeSync(
-      new TextEncoder().encode(
-        JSON.stringify({
-          name: item.name,
-          kind: item.kind,
-          local_version: item.localVersion,
-          npm_latest: item.npmLatest,
-          class: item.classification,
-          attested: item.attested ? 'yes' : 'no',
-        }) + '\n',
-      ),
+    console.log(
+      JSON.stringify({
+        name: item.name,
+        kind: item.kind,
+        local_version: item.localVersion,
+        npm_latest: item.npmLatest,
+        class: item.classification,
+        attested: item.attested ? 'yes' : 'no',
+      }),
     )
   }
 } else {
@@ -144,7 +142,7 @@ if (jsonMode) {
     lines.push(`  error:       ${errorCount}`)
   }
 
-  Deno.stdout.writeSync(new TextEncoder().encode(lines.join('\n') + '\n'))
+  console.log(lines.join('\n'))
 }
 
 const unpublishedTotal = evaluations.filter((e) => e.classification === 'unpublished').length
@@ -153,16 +151,10 @@ const noOidcTotal = evaluations.filter((e) => e.classification === 'no-oidc').le
 
 if (preflightMode) {
   if (unpublishedTotal === 0 && errorTotal === 0) {
-    Deno.stdout.writeSync(
-      new TextEncoder().encode(
-        '\nPREFLIGHT OK: every distribution package exists on the registry.\n',
-      ),
-    )
+    console.log('\nPREFLIGHT OK: every distribution package exists on the registry.\n')
   } else {
-    Deno.stderr.writeSync(
-      new TextEncoder().encode(
-        `\n::error::preflight failed — ${unpublishedTotal} package(s) have never been published, ${errorTotal} unqueryable. OIDC cannot debut a package; bootstrap each one from a maintainer machine, then re-run.\n`,
-      ),
+    console.error(
+      `\n::error::preflight failed — ${unpublishedTotal} package(s) have never been published, ${errorTotal} unqueryable. OIDC cannot debut a package; bootstrap each one from a maintainer machine, then re-run.\n`,
     )
     Deno.exit(1)
   }
@@ -170,16 +162,10 @@ if (preflightMode) {
 
 if (checkMode) {
   if (unpublishedTotal > 0 || noOidcTotal > 0 || errorTotal > 0) {
-    Deno.stderr.writeSync(
-      new TextEncoder().encode(
-        `\nFAIL: ${unpublishedTotal} unpublished, ${noOidcTotal} without OIDC attestation, ${errorTotal} unqueryable\n`,
-      ),
+    console.error(
+      `\nFAIL: ${unpublishedTotal} unpublished, ${noOidcTotal} without OIDC attestation, ${errorTotal} unqueryable\n`,
     )
     Deno.exit(1)
   }
-  Deno.stdout.writeSync(
-    new TextEncoder().encode(
-      '\nOK: every package is published and carries provenance attestations.\n',
-    ),
-  )
+  console.log('\nOK: every package is published and carries provenance attestations.\n')
 }
