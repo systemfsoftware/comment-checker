@@ -5,6 +5,7 @@
     "os": "linux",
     "cpu": "x64",
     "libc": "glibc",
+    "runner": "ubuntu-latest",
     "bin": "comment-checker"
   },
   {
@@ -13,6 +14,7 @@
     "os": "linux",
     "cpu": "arm64",
     "libc": "glibc",
+    "runner": "ubuntu-24.04-arm",
     "bin": "comment-checker"
   },
   {
@@ -20,6 +22,7 @@
     "suffix": "darwin-x64",
     "os": "darwin",
     "cpu": "x64",
+    "runner": "macos-14",
     "bin": "comment-checker"
   },
   {
@@ -27,6 +30,7 @@
     "suffix": "darwin-arm64",
     "os": "darwin",
     "cpu": "arm64",
+    "runner": "macos-14",
     "bin": "comment-checker"
   },
   {
@@ -34,6 +38,7 @@
     "suffix": "win32-x64",
     "os": "win32",
     "cpu": "x64",
+    "runner": "windows-2022",
     "bin": "comment-checker.exe"
   }
 ]
