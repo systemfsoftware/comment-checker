@@ -30,12 +30,12 @@ jobs:
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
 
       - name: Consume pending change intents
-        run: deno run --allow-read --allow-write scripts/tools/release-version.ts
+        run: ./scripts/tools/release-version.ts
 
       - name: Open or update the Release PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: deno run --allow-run=gh,git --allow-read --allow-env scripts/tools/create-or-update-release-pr.ts
+        run: ./scripts/tools/create-or-update-release-pr.ts
 
   release:
     if: >-
@@ -100,16 +100,16 @@ jobs:
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
 
       - name: "Gate: check-matrix"
-        run: deno run --allow-read scripts/tools/check-matrix.ts
+        run: ./scripts/tools/check-matrix.ts
 
       - name: "Gate: binary smoke tests"
-        run: deno run --allow-run --allow-read scripts/tools/run-binary-smoke.ts --target ${{ matrix.target }} --bin-dir target/${{ matrix.target }}/release
+        run: ./scripts/tools/run-binary-smoke.ts --target ${{ matrix.target }} --bin-dir target/${{ matrix.target }}/release
 
       - name: Stage platform package
-        run: deno run --allow-read --allow-write scripts/tools/stage-platform-package.ts --target ${{ matrix.target }} --suffix ${{ matrix.suffix }} --stage ${{ runner.temp }}/platform-${{ matrix.suffix }} --bin-dir target/${{ matrix.target }}/release
+        run: ./scripts/tools/stage-platform-package.ts --target ${{ matrix.target }} --suffix ${{ matrix.suffix }} --stage ${{ runner.temp }}/platform-${{ matrix.suffix }} --bin-dir target/${{ matrix.target }}/release
 
       - name: Bundle tarball
-        run: deno run --allow-run=tar --allow-read --allow-write scripts/tools/bundle-release-tarball.ts --target ${{ matrix.target }} --bin-dir target/${{ matrix.target }}/release --out-dir ${{ runner.temp }}/release-tarball-${{ matrix.suffix }}
+        run: ./scripts/tools/bundle-release-tarball.ts --target ${{ matrix.target }} --bin-dir target/${{ matrix.target }}/release --out-dir ${{ runner.temp }}/release-tarball-${{ matrix.suffix }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -155,7 +155,7 @@ jobs:
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
 
       - name: Preflight — every package must already exist on npm
-        run: deno run --allow-net --allow-read --allow-env scripts/tools/check-publish.ts --preflight
+        run: ./scripts/tools/check-publish.ts --preflight
 
       - name: Build launcher
         run: |
@@ -163,9 +163,7 @@ jobs:
           pnpm -r build
 
       - name: Sync root version
-        run: |
-          VERSION="$(jq -r .version npm/packages/comment-checker/package.json)"
-          VERSION="$VERSION" deno run --allow-env=VERSION --allow-read --allow-write scripts/tools/sync-root-version.ts
+        run: ./scripts/tools/sync-root-version.ts
 
       - name: Publish root launcher
         run: pnpm --filter @systemfsoftware/claude-code-comment-checker publish --provenance --access public --no-git-checks
@@ -177,10 +175,10 @@ jobs:
           path: stages
 
       - name: Publish platform packages
-        run: deno run --allow-run --allow-read scripts/tools/publish-platform-stages.ts
+        run: ./scripts/tools/publish-platform-stages.ts
 
       - name: Tag released packages
-        run: deno run --allow-run=git --allow-read scripts/tools/tag-released-packages.ts
+        run: ./scripts/tools/tag-released-packages.ts
 
       - name: Download platform artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -189,6 +187,6 @@ jobs:
           path: release-assets
 
       - name: Create GitHub release with binaries and changelog
-        run: deno run --allow-run=git,gh --allow-read --allow-env scripts/tools/create-github-release.ts
+        run: ./scripts/tools/create-github-release.ts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
