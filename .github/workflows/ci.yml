@@ -97,7 +97,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ hashFiles('package.json', 'Cargo.toml', 'Cargo.lock', '.cargo/config.toml', 'crates/comment-checker/Cargo.toml', 'crates/comment-checker/src/**', 'crates/comment-checker/tests/**', 'turbo.json', 'npm/packages/comment-checker/package.json') }}
+          key: turbo-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.toml', 'Cargo.lock', '.cargo/config.toml', 'crates/comment-checker/**', 'turbo.json') }}
           restore-keys: |
             turbo-${{ runner.os }}-
 
