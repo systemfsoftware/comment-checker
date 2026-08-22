@@ -72,6 +72,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@0267444136ce4919088f5eae0461f736f21356de # v1
         with:
           toolchain: stable
+          target: ${{ matrix.target }}
           targets: ${{ matrix.target }}
 
       - name: Linux arm64 cross-linker
@@ -97,7 +98,7 @@ jobs:
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
 
-      - uses: denoland/setup-deno@v2
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
 
       - name: "Gate: check-matrix"
         run: deno run --allow-read scripts/tools/check-matrix.ts
@@ -143,6 +144,7 @@ jobs:
       && github.event.pull_request.merged == true
       && github.event.pull_request.head.ref == 'changeset-release/master'
       && github.event.pull_request.user.login == 'github-actions[bot]'
+    name: publish · oidc · tag
     needs: [release]
     runs-on: ubuntu-latest
     permissions:
@@ -197,9 +199,7 @@ jobs:
         with:
           path: release-assets
 
-      - name: Attach tarballs to GitHub release
-        run: |
-          VERSION="$(jq -r .version npm/packages/comment-checker/package.json)"
-          gh release create "v$VERSION" release-assets/**/*.tar.gz --title "v$VERSION" --notes "Release v$VERSION"
+      - name: Create GitHub release with binaries and changelog
+        run: deno run --allow-run=git,gh --allow-read --allow-env scripts/tools/create-github-release.ts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
