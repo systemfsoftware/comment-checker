@@ -7,3 +7,7 @@
 ## 0.1.2
 
   - Release v0.1.1 with fixed binary smoke test, multiplatform tarball assets, and automated GitHub release notes.
+
+## 0.1.3
+
+  - Release v0.1.2 with cross-platform release scripts and automated GitHub releases.
