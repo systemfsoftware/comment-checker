@@ -5,21 +5,25 @@ import { join } from '@std/path'
 import { type Target, TARGETS_PATH } from '../lib/shared.ts'
 
 const flags = parseArgs(Deno.args, {
-  string: ['target', 'suffix', 'version', 'stage', 'bin-dir'],
+  string: ['target', 'suffix', 'stage', 'bin-dir'],
 })
 
 const targetName = flags.target
 const suffix = flags.suffix
-const version = flags.version
 const stage = flags.stage
 const binDir = flags['bin-dir']
 
-if (!targetName || !suffix || !version || !stage || !binDir) {
+if (!targetName || !suffix || !stage || !binDir) {
   console.error(
-    'Usage: stage-platform-package.ts --target <target> --suffix <suffix> --version <version> --stage <dir> --bin-dir <dir>',
+    'Usage: stage-platform-package.ts --target <target> --suffix <suffix> --stage <dir> --bin-dir <dir>',
   )
   Deno.exit(1)
 }
+
+const launcherManifest = JSON.parse(
+  await Deno.readTextFile('npm/packages/comment-checker/package.json'),
+)
+const version = launcherManifest.version as string
 
 const targets: Target[] = JSON.parse(await Deno.readTextFile(TARGETS_PATH))
 const row = targets.find((t) => t.target === targetName && t.suffix === suffix)
@@ -66,6 +70,11 @@ const manifest = {
 await Deno.writeTextFile(
   join(stage, 'package.json'),
   JSON.stringify(manifest, null, 2) + '\n',
+)
+
+await Deno.writeTextFile(
+  join(stage, 'binarySha256'),
+  hex + '\n',
 )
 
 console.log(`staged ${manifest.name}@${version} (sha: ${hex})`)

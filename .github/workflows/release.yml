@@ -27,7 +27,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: denoland/setup-deno@v2
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
 
       - name: Consume pending change intents
         run: deno run --allow-read --allow-write scripts/tools/release-version.ts
@@ -73,7 +73,6 @@ jobs:
         with:
           toolchain: stable
           target: ${{ matrix.target }}
-          targets: ${{ matrix.target }}
 
       - name: Linux arm64 cross-linker
         if: matrix.target == 'aarch64-unknown-linux-gnu' && matrix.runner == 'ubuntu-latest'
@@ -107,28 +106,17 @@ jobs:
         run: deno run --allow-run --allow-read scripts/tools/run-binary-smoke.ts --target ${{ matrix.target }} --bin-dir target/${{ matrix.target }}/release
 
       - name: Stage platform package
-        run: |
-          VERSION="$(jq -r .version npm/packages/comment-checker/package.json)"
-          deno run --allow-read --allow-write scripts/tools/stage-platform-package.ts \
-            --target ${{ matrix.target }} \
-            --suffix ${{ matrix.suffix }} \
-            --version "$VERSION" \
-            --stage ${{ runner.temp }}/platform-${{ matrix.suffix }} \
-            --bin-dir target/${{ matrix.target }}/release
+        run: deno run --allow-read --allow-write scripts/tools/stage-platform-package.ts --target ${{ matrix.target }} --suffix ${{ matrix.suffix }} --stage ${{ runner.temp }}/platform-${{ matrix.suffix }} --bin-dir target/${{ matrix.target }}/release
 
       - name: Bundle tarball
-        shell: bash
-        run: |
-          BINARY_NAME="$(jq -r --arg target "${{ matrix.target }}" '.[] | select(.target == $target) | .bin' scripts/lib/targets.json)"
-          cd "target/${{ matrix.target }}/release"
-          tar -czf "$RUNNER_TEMP/comment-checker-${{ matrix.target }}.tar.gz" "${BINARY_NAME}"
+        run: deno run --allow-run=tar --allow-read --allow-write scripts/tools/bundle-release-tarball.ts --target ${{ matrix.target }} --bin-dir target/${{ matrix.target }}/release --out-dir ${{ runner.temp }}/release-tarball-${{ matrix.suffix }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-${{ matrix.suffix }}
           path: |
-            ${{ runner.temp }}/comment-checker-${{ matrix.target }}.tar.gz
+            ${{ runner.temp }}/release-tarball-${{ matrix.suffix }}/comment-checker-${{ matrix.target }}.tar.gz
             ${{ runner.temp }}/platform-${{ matrix.suffix }}/binarySha256
 
       - name: Upload staged platform package
@@ -197,6 +185,7 @@ jobs:
       - name: Download platform artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
+          pattern: release-*
           path: release-assets
 
       - name: Create GitHub release with binaries and changelog
