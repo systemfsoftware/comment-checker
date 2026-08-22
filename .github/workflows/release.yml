@@ -75,8 +75,9 @@ jobs:
           echo "BINARY_NAME=$BINARY_NAME" >> "$GITHUB_ENV"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        uses: actions-rust-lang/setup-rust-toolchain@0267444136ce4919088f5eae0461f736f21356de # v1 (same as ci.yml)
         with:
+          toolchain: stable
           targets: ${{ matrix.target }}
 
       - name: Linux arm64 cross-linker
