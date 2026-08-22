@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/claude-code-comment-checker",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Claude Code PostToolUse hook that blocks unnecessary comments (npm distribution launcher)",
   "license": "Apache-2.0",
   "repository": {
