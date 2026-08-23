@@ -1,0 +1,91 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # Root workspace: build/lint tooling only.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    versioning-strategy: increase
+    open-pull-requests-limit: 20
+    ignore:
+      # typescript majors are deliberate migrations, not routine bumps:
+      # the npm launcher ships against a specific typescript compiler surface
+      # and a 7.x major would break it.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+
+    groups:
+      turborepo-minor-patch:
+        patterns:
+          - "turbo"
+        update-types: ["minor", "patch"]
+
+      other-minor-patch:
+        patterns: ["*"]
+        exclude-patterns:
+          - "turbo"
+          - "typescript"
+        update-types: ["minor", "patch"]
+
+      major-updates:
+        patterns: ["*"]
+        exclude-patterns:
+          - "typescript"
+        update-types: ["major"]
+
+  # The published npm wrapper. Effect is pinned to v4 RC -- effect@3 is a
+  # deliberate migration the wrapper never makes, so block a stray 3.x pin.
+  - package-ecosystem: npm
+    directory: "/npm/packages/comment-checker"
+    schedule:
+      interval: weekly
+      day: monday
+    versioning-strategy: increase
+    open-pull-requests-limit: 20
+    ignore:
+      # typescript majors are deliberate migrations, not routine bumps.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+
+    groups:
+      oxlint-minor-patch:
+        patterns:
+          - "oxlint"
+        update-types: ["minor", "patch"]
+
+      oxlint-major:
+        patterns:
+          - "oxlint"
+        update-types: ["major"]
+
+      effect-minor-patch:
+        patterns:
+          - "@effect/*"
+          - "effect"
+        update-types: ["minor", "patch"]
+
+      other-minor-patch:
+        patterns: ["*"]
+        exclude-patterns:
+          - "oxlint"
+          - "@effect/*"
+          - "typescript"
+        update-types: ["minor", "patch"]
+
+      major-updates:
+        patterns: ["*"]
+        exclude-patterns:
+          - "oxlint"
+          - "typescript"
+        update-types: ["major"]
