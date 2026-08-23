@@ -1,7 +1,7 @@
 #!/usr/bin/env -S deno run --allow-run=tar --allow-read --allow-write --allow-env
 
 import { parseArgs } from '@std/cli/parse-args'
-import { join } from '@std/path'
+import { join, resolve } from '@std/path'
 import { type Target, TARGETS_PATH } from '../lib/shared.ts'
 
 const flags = parseArgs(Deno.args, {
@@ -27,7 +27,9 @@ if (!row) {
 }
 
 await Deno.mkdir(outDir, { recursive: true })
-const tarPath = join(outDir, `comment-checker-${targetName}.tar.gz`)
+// tar runs with cwd=binDir, so the archive path must be absolute: a relative
+// one would resolve against binDir instead of the invocation directory.
+const tarPath = join(resolve(outDir), `comment-checker-${targetName}.tar.gz`)
 
 const tarCmd = new Deno.Command('tar', {
   args: ['-czf', tarPath, row.bin],
