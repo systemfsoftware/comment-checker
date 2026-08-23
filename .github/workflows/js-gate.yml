@@ -33,4 +33,5 @@ jobs:
         run: |
           cd scripts
           deno task lint
+          deno check --config ./deno.jsonc tools/*.ts
           deno task check-matrix

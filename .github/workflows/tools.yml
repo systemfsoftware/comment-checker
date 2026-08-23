@@ -33,3 +33,11 @@ jobs:
             echo "shebang invocation produced no output on ${{ matrix.os }}" >&2
             exit 1
           }
+          # Same cwd and argv shape as release.yml publish (minus --dry-run).
+          sync="$(./scripts/tools/sync-root-version.ts --dry-run)"
+          printf '%s\n' "$sync"
+          grep -q '^sync-root-version: dry-run,' <<<"$sync" || {
+            echo "sync-root-version produced no dry-run verdict on ${{ matrix.os }}" >&2
+            exit 1
+          }
+          ./scripts/tools/check-matrix.ts
