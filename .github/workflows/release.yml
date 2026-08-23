@@ -1,22 +1,49 @@
+# Release pipeline. Both phases hang off pushes to master and are selected by
+# repository state, never by a pull-request ref.
+#
+# The publish used to trigger on `pull_request: closed` for the release PR.
+# Merging that PR with branch deletion destroys refs/pull/<n>/merge, so GitHub
+# cancelled the queued run with zero jobs and nothing published -- the trigger
+# was destroyed by the act of merging, silently. plan-release.ts reads durable
+# state instead: pending .changeset intents mean "version", an untagged
+# manifest version means "publish". A half-finished release resumes on the next
+# push because the missing tag still says "publish".
 name: Release
 
 on:
   push:
     branches: [master]
-  pull_request:
-    types: [closed]
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      phase: ${{ steps.plan.outputs.phase }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
+
+      - id: plan
+        name: Decide release phase from repository state
+        run: ./scripts/tools/plan-release.ts >> "$GITHUB_OUTPUT"
+
   version:
-    if: github.event_name == 'push'
+    needs: plan
+    if: needs.plan.outputs.phase == 'version'
     name: version · open release PR
     runs-on: ubuntu-latest
     permissions:
@@ -41,11 +68,8 @@ jobs:
         run: ./scripts/tools/create-or-update-release-pr.ts
 
   release:
-    if: >-
-      github.event_name == 'pull_request'
-      && github.event.pull_request.merged == true
-      && github.event.pull_request.head.ref == 'changeset-release/master'
-      && github.event.pull_request.user.login == 'github-actions[bot]'
+    needs: plan
+    if: needs.plan.outputs.phase == 'publish'
     name: build · ${{ matrix.suffix }}
     runs-on: ${{ matrix.runner }}
     permissions:
@@ -130,13 +154,9 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: >-
-      github.event_name == 'pull_request'
-      && github.event.pull_request.merged == true
-      && github.event.pull_request.head.ref == 'changeset-release/master'
-      && github.event.pull_request.user.login == 'github-actions[bot]'
+    needs: [plan, release]
+    if: needs.plan.outputs.phase == 'publish'
     name: publish · oidc · tag
-    needs: [release]
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -10,7 +10,9 @@
     "check-matrix": "./tools/check-matrix.ts",
     "check:publish": "./tools/check-publish.ts",
     "publish:unpublished": "./tools/publish-and-setup-npm-trust.ts",
-    "lint": "deno lint --config ./deno.jsonc ."
+    "lint": "deno lint --config ./deno.jsonc .",
+    "lint:workflows": "./tools/lint-workflows.ts",
+    "plan:release": "./tools/plan-release.ts"
   },
   "fmt": {
     "lineWidth": 100,
