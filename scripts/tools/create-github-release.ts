@@ -11,10 +11,17 @@ async function exec(cmd: string, args: string[]): Promise<string> {
     stdout: 'piped',
     stderr: 'inherit',
   }).output()
-  if (!out.success) {
-    throw new Error(`${cmd} ${args.join(' ')} failed`)
-  }
+  if (!out.success) throw new Error(`${cmd} ${args.join(' ')} failed`)
   return new TextDecoder().decode(out.stdout)
+}
+
+async function firstExisting(paths: string[]): Promise<string | null> {
+  for (const p of paths) {
+    try {
+      if ((await Deno.stat(p)).isFile) return p
+    } catch { /* next */ }
+  }
+  return null
 }
 
 const launcherManifest = JSON.parse(await Deno.readTextFile(MANIFEST))
@@ -23,53 +30,28 @@ const targets: Target[] = JSON.parse(await Deno.readTextFile(TARGETS_PATH))
 
 let releaseNotes = `Release v${version}`
 try {
-  const changelogText = await Deno.readTextFile(CHANGELOG)
-  const versionSection = changelogText.split(new RegExp(`##\\s+${version.replace(/\./g, '\\.')}`))
-    ?.[1]
-  if (versionSection) {
-    const sectionBody = versionSection.split(/\n##\s+/)?.[0]?.trim()
-    if (sectionBody) {
-      releaseNotes = sectionBody
-    }
-  }
-} catch {
-  // empty
-}
+  const text = await Deno.readTextFile(CHANGELOG)
+  const sec = text.split(new RegExp(`##\\s+${version.replace(/\./g, '\\.')}`))?.[1]
+  const body = sec?.split(/\n##\s+/)?.[0]?.trim()
+  if (body) releaseNotes = body
+} catch { /* no changelog */ }
 
-const binaryFiles: string[] = []
-for (const target of targets) {
-  const tarName = `release-assets/release-${target.suffix}/comment-checker-${target.target}.tar.gz`
-  try {
-    const stat = await Deno.stat(tarName)
-    if (stat.isFile) {
-      binaryFiles.push(tarName)
-    }
-  } catch {
-    const flatName = `release-assets/comment-checker-${target.target}.tar.gz`
-    try {
-      const statFlat = await Deno.stat(flatName)
-      if (statFlat.isFile) {
-        binaryFiles.push(flatName)
-      }
-    } catch {
-      // ignore
-    }
-  }
+const binaryFiles = (await Promise.all(targets.map((t) =>
+  firstExisting([
+    `release-assets/release-${t.suffix}/dist/release-tarball-${t.suffix}/comment-checker-${t.target}.tar.gz`,
+    `release-assets/release-${t.suffix}/comment-checker-${t.target}.tar.gz`,
+    `release-assets/comment-checker-${t.target}.tar.gz`,
+  ]).then((found) => {
+    if (!found) console.error(`create-github-release: missing tarball for ${t.target}`)
+    return found
+  })
+))).filter((p): p is string => p !== null)
+
+if (binaryFiles.length !== targets.length) {
+  console.error(`create-github-release: expected ${targets.length} tarballs, found ${binaryFiles.length}`)
+  Deno.exit(1)
 }
 
 const tag = `v${version}`
-const ghArgs = [
-  'release',
-  'create',
-  tag,
-  ...binaryFiles,
-  '--title',
-  tag,
-  '--notes',
-  releaseNotes,
-]
-
-await exec('gh', ghArgs)
-console.log(
-  `created GitHub release ${tag} with ${binaryFiles.length} binary tarball(s) and changelog notes`,
-)
+await exec('gh', ['release', 'create', tag, ...binaryFiles, '--title', tag, '--notes', releaseNotes])
+console.log(`created GitHub release ${tag} with ${binaryFiles.length} binary tarball(s)`)
