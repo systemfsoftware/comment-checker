@@ -106,24 +106,24 @@ jobs:
         run: ./scripts/tools/run-binary-smoke.ts --target ${{ matrix.target }} --bin-dir target/${{ matrix.target }}/release
 
       - name: Stage platform package
-        run: ./scripts/tools/stage-platform-package.ts --target ${{ matrix.target }} --suffix ${{ matrix.suffix }} --stage ${{ runner.temp }}/platform-${{ matrix.suffix }} --bin-dir target/${{ matrix.target }}/release
+        run: ./scripts/tools/stage-platform-package.ts --target ${{ matrix.target }} --suffix ${{ matrix.suffix }} --stage dist/staging/platform-${{ matrix.suffix }} --bin-dir target/${{ matrix.target }}/release
 
       - name: Bundle tarball
-        run: ./scripts/tools/bundle-release-tarball.ts --target ${{ matrix.target }} --bin-dir target/${{ matrix.target }}/release --out-dir ${{ runner.temp }}/release-tarball-${{ matrix.suffix }}
+        run: ./scripts/tools/bundle-release-tarball.ts --target ${{ matrix.target }} --bin-dir target/${{ matrix.target }}/release --out-dir dist/release-tarball-${{ matrix.suffix }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-${{ matrix.suffix }}
           path: |
-            ${{ runner.temp }}/release-tarball-${{ matrix.suffix }}/comment-checker-${{ matrix.target }}.tar.gz
-            ${{ runner.temp }}/platform-${{ matrix.suffix }}/binarySha256
+            dist/release-tarball-${{ matrix.suffix }}/comment-checker-${{ matrix.target }}.tar.gz
+            dist/staging/platform-${{ matrix.suffix }}/binarySha256
 
       - name: Upload staged platform package
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: platform-stage-${{ matrix.suffix }}
-          path: ${{ runner.temp }}/platform-${{ matrix.suffix }}
+          path: dist/staging/platform-${{ matrix.suffix }}
           if-no-files-found: error
 
   publish:
