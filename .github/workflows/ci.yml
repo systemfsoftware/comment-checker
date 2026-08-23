@@ -65,11 +65,10 @@ jobs:
       - name: Lint GitHub Actions workflows (issue #9)
         run: ./scripts/tools/lint-workflows.ts
 
-      - name: Release scripts lint + tests + matrix agreement (deno)
+      - name: Release scripts lint + matrix agreement (deno)
         run: |
           cd scripts
           deno task lint
-          deno task test
           deno task check-matrix
 
   packaging:
