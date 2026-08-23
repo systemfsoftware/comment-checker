@@ -1,5 +1,6 @@
 #!/usr/bin/env -S deno run --allow-env=VERSION --allow-read --allow-write
 import { resolve } from '@std/path'
+import { diff } from '@libs/diff'
 import { parseCliArgs } from '../lib/cli.ts'
 import {
   LAUNCHER_MANIFEST_PATH,
@@ -50,11 +51,8 @@ manifest.optionalDependencies = Object.fromEntries(
 const next = JSON.stringify(manifest, null, 2) + (original.endsWith('\n') ? '\n' : '')
 
 if (dryRun) {
-  console.log(
-    original === next
-      ? 'sync-root-version: dry-run, no change'
-      : 'sync-root-version: dry-run, would rewrite',
-  )
+  // @libs/diff (patience algorithm) produces a real unified patch.
+  console.log(diff(original, next))
 } else {
   await Deno.writeTextFile(manifestPath, next)
 }
