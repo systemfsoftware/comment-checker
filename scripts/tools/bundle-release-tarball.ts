@@ -1,8 +1,8 @@
 #!/usr/bin/env -S deno run --allow-run=tar --allow-read --allow-write --allow-env
 
 import { parseArgs } from '@std/cli/parse-args'
-import { join, resolve } from '@std/path'
 import { type Target, TARGETS_PATH } from '../lib/shared.ts'
+import { writeReleaseTarball } from '../lib/write-release-tarball.ts'
 
 const flags = parseArgs(Deno.args, {
   string: ['target', 'bin-dir', 'out-dir'],
@@ -26,22 +26,10 @@ if (!row) {
   Deno.exit(1)
 }
 
-await Deno.mkdir(outDir, { recursive: true })
-// tar runs with cwd=binDir, so the archive path must be absolute: a relative
-// one would resolve against binDir instead of the invocation directory.
-const tarPath = join(resolve(outDir), `comment-checker-${targetName}.tar.gz`)
-
-const tarCmd = new Deno.Command('tar', {
-  args: ['-czf', tarPath, row.bin],
-  cwd: binDir,
-  stdout: 'inherit',
-  stderr: 'inherit',
-})
-
-const res = await tarCmd.output()
-if (!res.success) {
-  console.error(`tar failed with exit code ${res.code}`)
+try {
+  const tarPath = await writeReleaseTarball(outDir, targetName, binDir, row.bin)
+  console.log(`bundled ${tarPath}`)
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error))
   Deno.exit(1)
 }
-
-console.log(`bundled ${tarPath}`)

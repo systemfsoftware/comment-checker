@@ -66,11 +66,49 @@ jobs:
             .github/workflows/ci.yml
             .github/workflows/release.yml
 
-      - name: Release scripts lint + matrix agreement gate (deno)
+      - name: Release scripts lint + tests + matrix agreement (deno)
         run: |
           cd scripts
           deno task lint
+          deno task test
           deno task check-matrix
+
+  packaging:
+    name: packaging · ${{ matrix.suffix }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            suffix: linux-x64
+            runner: ubuntu-latest
+            bin: comment-checker
+          - target: x86_64-pc-windows-msvc
+            suffix: win32-x64
+            runner: windows-2022
+            bin: comment-checker.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
+
+      - name: Fixture binary + packaging rehearsal
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin" "$RUNNER_TEMP/stage" "$RUNNER_TEMP/tarball"
+          printf 'fixture\n' > "$RUNNER_TEMP/bin/${{ matrix.bin }}"
+          ./scripts/tools/check-matrix.ts
+          ./scripts/tools/stage-platform-package.ts \
+            --target ${{ matrix.target }} \
+            --suffix ${{ matrix.suffix }} \
+            --stage "$RUNNER_TEMP/stage" \
+            --bin-dir "$RUNNER_TEMP/bin"
+          ./scripts/tools/bundle-release-tarball.ts \
+            --target ${{ matrix.target }} \
+            --bin-dir "$RUNNER_TEMP/bin" \
+            --out-dir "$RUNNER_TEMP/tarball"
+          test -f "$RUNNER_TEMP/tarball/comment-checker-${{ matrix.target }}.tar.gz"
   mutation:
     runs-on: ubuntu-latest
     steps:

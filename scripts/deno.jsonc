@@ -1,5 +1,6 @@
 {
   "imports": {
+    "@std/assert": "jsr:@std/assert@1.0.19",
     "@std/cli": "jsr:@std/cli@1.0.15",
     "@std/path": "jsr:@std/path@1.1.6",
     "@std/yaml": "jsr:@std/yaml@1.0.4"
@@ -10,7 +11,8 @@
     "check-matrix": "./tools/check-matrix.ts",
     "check:publish": "./tools/check-publish.ts",
     "publish:unpublished": "./tools/publish-and-setup-npm-trust.ts",
-    "lint": "deno lint --config ./deno.jsonc ."
+    "lint": "deno lint --config ./deno.jsonc .",
+    "test": "deno test --config ./deno.jsonc --allow-read --allow-write --allow-run=tar --allow-env"
   },
   "fmt": {
     "lineWidth": 100,
