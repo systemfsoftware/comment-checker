@@ -23,9 +23,12 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
+          # checkout v5 defaults persist-credentials to false; the release PR
+          # branch is pushed with plain git, which needs the stored credential.
+          persist-credentials: true
 
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
 
@@ -67,7 +70,7 @@ jobs:
             suffix: win32-x64
             runner: windows-2022
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - uses: actions-rust-lang/setup-rust-toolchain@0267444136ce4919088f5eae0461f736f21356de # v1
         with:
@@ -86,7 +89,7 @@ jobs:
             echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc"
           } >> "$GITHUB_ENV"
 
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
             ~/.cargo/registry
@@ -112,7 +115,7 @@ jobs:
         run: ./scripts/tools/bundle-release-tarball.ts --target ${{ matrix.target }} --bin-dir target/${{ matrix.target }}/release --out-dir dist/release-tarball-${{ matrix.suffix }}
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: release-${{ matrix.suffix }}
           path: |
@@ -120,7 +123,7 @@ jobs:
             dist/staging/platform-${{ matrix.suffix }}/binarySha256
 
       - name: Upload staged platform package
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: platform-stage-${{ matrix.suffix }}
           path: dist/staging/platform-${{ matrix.suffix }}
@@ -139,16 +142,19 @@ jobs:
       contents: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
+          # checkout v5 defaults persist-credentials to false; tag-released-packages
+          # pushes tags with plain git, which needs the stored credential.
+          persist-credentials: true
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6
         with:
           version: 11.21.0
 
@@ -169,7 +175,7 @@ jobs:
         run: pnpm --filter @systemfsoftware/claude-code-comment-checker publish --provenance --access public --no-git-checks
 
       - name: Download staged platform packages
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           pattern: platform-stage-*
           path: stages
@@ -181,7 +187,7 @@ jobs:
         run: ./scripts/tools/tag-released-packages.ts
 
       - name: Download platform artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           pattern: release-*
           path: release-assets
