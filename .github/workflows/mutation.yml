@@ -1,0 +1,54 @@
+name: Mutation
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions-rust-lang/setup-rust-toolchain@0267444136ce4919088f5eae0461f736f21356de # v1
+        with:
+          toolchain: stable
+
+      - uses: ./.github/actions/setup-pnpm-node
+
+      - name: Install cargo-mutants subcommand
+        run: |
+          cargo install cargo-mutants
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Cache turbo verdicts
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.toml', 'Cargo.lock', '.cargo/config.toml', 'crates/comment-checker/**', 'package.json', 'turbo.json') }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      - name: Cache cargo build (mutants miss path)
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-mut-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Cache pnpm store
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Mutation gate via turbo (core classifier, 100%)
+        run: pnpm install --frozen-lockfile && pnpm gate:mutants

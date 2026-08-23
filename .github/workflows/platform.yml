@@ -1,0 +1,166 @@
+# Single platform matrix. Callers cannot invent a second copy.
+#
+#   with.mode: rehearsal  — fixture binary, stage + bundle (PR)
+#   with.mode: release    — cargo build, smoke, stage, bundle, upload (master)
+name: Platform
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: rehearsal or release
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  platform:
+    name: ${{ inputs.mode }} · ${{ matrix.suffix }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            suffix: linux-x64
+            runner: ubuntu-latest
+            bin: comment-checker
+          - target: aarch64-unknown-linux-gnu
+            suffix: linux-arm64
+            runner: ubuntu-24.04-arm
+            bin: comment-checker
+          - target: x86_64-apple-darwin
+            suffix: darwin-x64
+            runner: macos-14
+            bin: comment-checker
+          - target: aarch64-apple-darwin
+            suffix: darwin-arm64
+            runner: macos-14
+            bin: comment-checker
+          - target: x86_64-pc-windows-msvc
+            suffix: win32-x64
+            runner: windows-2022
+            bin: comment-checker.exe
+    steps:
+      - name: Reject unknown mode
+        run: |
+          case "${{ inputs.mode }}" in
+            rehearsal|release) exit 0 ;;
+            *)
+              echo "platform.yml: mode must be rehearsal or release, got '${{ inputs.mode }}'" >&2
+              exit 1
+              ;;
+          esac
+
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions-rust-lang/setup-rust-toolchain@0267444136ce4919088f5eae0461f736f21356de # v1
+        if: inputs.mode == 'release'
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+
+      - name: Linux arm64 cross-linker
+        if: >-
+          inputs.mode == 'release'
+          && matrix.target == 'aarch64-unknown-linux-gnu'
+          && matrix.runner == 'ubuntu-latest'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          {
+            echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc"
+            echo "AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar"
+            echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc"
+          } >> "$GITHUB_ENV"
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        if: inputs.mode == 'release'
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('Cargo.lock') }}
+
+      - name: Build release binary
+        if: inputs.mode == 'release'
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
+
+      - name: Fixture binary
+        if: inputs.mode == 'rehearsal'
+        shell: bash
+        run: |
+          mkdir -p "target/${{ matrix.target }}/release"
+          printf '%s\n' fixture > "target/${{ matrix.target }}/release/${{ matrix.bin }}"
+
+      - name: "Gate: check-matrix"
+        shell: bash
+        run: ./scripts/tools/check-matrix.ts
+
+      - name: "Gate: binary smoke tests"
+        if: inputs.mode == 'release'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$(./scripts/tools/run-binary-smoke.ts --target ${{ matrix.target }} --bin-dir target/${{ matrix.target }}/release)"
+          printf '%s\n' "$out"
+          grep -q 'binary smoke passed' <<<"$out" || {
+            echo "smoke gate produced no verdict for ${{ matrix.suffix }} -- it did not run" >&2
+            exit 1
+          }
+
+      - name: Stage platform package
+        shell: bash
+        run: |
+          ./scripts/tools/stage-platform-package.ts \
+            --target ${{ matrix.target }} \
+            --suffix ${{ matrix.suffix }} \
+            --stage dist/staging/platform-${{ matrix.suffix }} \
+            --bin-dir target/${{ matrix.target }}/release
+
+      - name: Bundle tarball
+        shell: bash
+        run: |
+          ./scripts/tools/bundle-release-tarball.ts \
+            --target ${{ matrix.target }} \
+            --bin-dir target/${{ matrix.target }}/release \
+            --out-dir dist/release-tarball-${{ matrix.suffix }}
+
+      - name: Verify this runner produced its outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in \
+            "dist/staging/platform-${{ matrix.suffix }}/package.json" \
+            "dist/staging/platform-${{ matrix.suffix }}/binarySha256" \
+            "dist/release-tarball-${{ matrix.suffix }}/comment-checker-${{ matrix.target }}.tar.gz"; do
+            test -s "$f" || { echo "missing or empty: $f" >&2; exit 1; }
+            echo "ok $f"
+          done
+          tar -tzf "dist/release-tarball-${{ matrix.suffix }}/comment-checker-${{ matrix.target }}.tar.gz" \
+            | grep -Fx "${{ matrix.bin }}"
+
+      - name: Upload artifacts
+        if: inputs.mode == 'release'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: release-${{ matrix.suffix }}
+          path: |
+            dist/release-tarball-${{ matrix.suffix }}/comment-checker-${{ matrix.target }}.tar.gz
+            dist/staging/platform-${{ matrix.suffix }}/binarySha256
+          if-no-files-found: error
+
+      - name: Upload staged platform package
+        if: inputs.mode == 'release'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: platform-stage-${{ matrix.suffix }}
+          path: dist/staging/platform-${{ matrix.suffix }}
+          if-no-files-found: error

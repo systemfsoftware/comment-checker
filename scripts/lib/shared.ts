@@ -11,6 +11,8 @@ export const LAUNCHER_MANIFEST_PATH = join(
   'package.json',
 )
 export const RELEASE_WORKFLOW_PATH = join(ROOT, '.github', 'workflows', 'release.yml')
+export const CI_WORKFLOW_PATH = join(ROOT, '.github', 'workflows', 'ci.yml')
+export const PLATFORM_WORKFLOW_PATH = join(ROOT, '.github', 'workflows', 'platform.yml')
 
 export interface Target {
   target: string

@@ -1,0 +1,38 @@
+name: Rust gate
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions-rust-lang/setup-rust-toolchain@0267444136ce4919088f5eae0461f736f21356de # v1
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - name: Cache cargo build
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test (unit + property + composition + F1)
+        run: cargo test --all-targets -- --test-threads=4
