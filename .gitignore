@@ -8,3 +8,7 @@ npm/bin
 dist
 dist-types
 *.tsbuildinfo
+
+# nix/direnv artifacts (regenerated; flake-profile is a GC root for the devshell)
+/result
+/.direnv/
