@@ -1,4 +1,0 @@
-[[repos]]
-name = "effect"
-url = "https://github.com/Effect-TS/effect"
-tag_prefix = "effect@4.0.0-rc"

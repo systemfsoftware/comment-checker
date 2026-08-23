@@ -11,5 +11,5 @@ export default defineConfig({
     suspicious: "error",
     perf: "warn",
   },
-  ignorePatterns: ["node_modules/**", "dist/**", "dist-types/**", "repos/**"],
+  ignorePatterns: ["node_modules/**", "dist/**", "dist-types/**"],
 })
