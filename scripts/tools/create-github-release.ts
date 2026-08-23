@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-run=git,gh --allow-read --allow-env
+#!/usr/bin/env -S deno run --allow-run=git,gh,tar --allow-read --allow-write --allow-env
 
 import { type Target, TARGETS_PATH } from '../lib/shared.ts'
 
@@ -36,22 +36,37 @@ try {
   if (body) releaseNotes = body
 } catch { /* no changelog */ }
 
-const binaryFiles = (await Promise.all(targets.map((t) =>
+const tarballs = (await Promise.all(targets.map((t) =>
   firstExisting([
     `release-assets/release-${t.suffix}/dist/release-tarball-${t.suffix}/comment-checker-${t.target}.tar.gz`,
     `release-assets/release-${t.suffix}/comment-checker-${t.target}.tar.gz`,
     `release-assets/comment-checker-${t.target}.tar.gz`,
   ]).then((found) => {
     if (!found) console.error(`create-github-release: missing tarball for ${t.target}`)
-    return found
+    return found ? ({ target: t, tarball: found } as const) : null
   })
-))).filter((p): p is string => p !== null)
+))).filter((v): v is { target: Target; tarball: string } => v !== null)
 
-if (binaryFiles.length !== targets.length) {
-  console.error(`create-github-release: expected ${targets.length} tarballs, found ${binaryFiles.length}`)
+if (tarballs.length !== targets.length) {
+  console.error(`create-github-release: expected ${targets.length} tarballs, found ${tarballs.length}`)
   Deno.exit(1)
 }
 
+await Deno.mkdir('release-assets/binaries', { recursive: true })
+
+const binaries = await Promise.all(tarballs.map(async ({ target, tarball }) => {
+  const tmp = `release-assets/binaries/.tmp-${target.suffix}`
+  await Deno.mkdir(tmp, { recursive: true })
+  const res = await new Deno.Command('tar', { args: ['-xzf', tarball, '-C', tmp] }).output()
+  if (!res.success) throw new Error(`tar -xzf ${tarball} failed with ${res.code}`)
+  const exe = target.bin.endsWith('.exe')
+  const outName = `comment-checker-${target.target}${exe ? '.exe' : ''}`
+  const outPath = `release-assets/binaries/${outName}`
+  await Deno.rename(`${tmp}/${target.bin}`, outPath)
+  await Deno.remove(tmp, { recursive: true })
+  return outPath
+}))
+
 const tag = `v${version}`
-await exec('gh', ['release', 'create', tag, ...binaryFiles, '--title', tag, '--notes', releaseNotes])
-console.log(`created GitHub release ${tag} with ${binaryFiles.length} binary tarball(s)`)
+await exec('gh', ['release', 'create', tag, ...binaries, '--title', tag, '--notes', releaseNotes])
+console.log(`created GitHub release ${tag} with ${binaries.length} binaries`)
