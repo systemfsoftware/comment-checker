@@ -96,19 +96,23 @@ jobs:
       - name: Fixture binary + packaging rehearsal
         shell: bash
         run: |
-          mkdir -p "$RUNNER_TEMP/bin" "$RUNNER_TEMP/stage" "$RUNNER_TEMP/tarball"
-          printf 'fixture\n' > "$RUNNER_TEMP/bin/${{ matrix.bin }}"
-          ./scripts/tools/check-matrix.ts
+          mkdir -p \
+            "target/${{ matrix.target }}/release" \
+            "dist/staging/platform-${{ matrix.suffix }}" \
+            "dist/release-tarball-${{ matrix.suffix }}"
+          printf '%s\n' fixture > "target/${{ matrix.target }}/release/${{ matrix.bin }}"
           ./scripts/tools/stage-platform-package.ts \
             --target ${{ matrix.target }} \
             --suffix ${{ matrix.suffix }} \
-            --stage "$RUNNER_TEMP/stage" \
-            --bin-dir "$RUNNER_TEMP/bin"
+            --stage "dist/staging/platform-${{ matrix.suffix }}" \
+            --bin-dir "target/${{ matrix.target }}/release"
           ./scripts/tools/bundle-release-tarball.ts \
             --target ${{ matrix.target }} \
-            --bin-dir "$RUNNER_TEMP/bin" \
-            --out-dir "$RUNNER_TEMP/tarball"
-          test -f "$RUNNER_TEMP/tarball/comment-checker-${{ matrix.target }}.tar.gz"
+            --bin-dir "target/${{ matrix.target }}/release" \
+            --out-dir "dist/release-tarball-${{ matrix.suffix }}"
+          archive="dist/release-tarball-${{ matrix.suffix }}/comment-checker-${{ matrix.target }}.tar.gz"
+          test -f "$archive"
+          tar -tzf "$archive" | grep -Fx "${{ matrix.bin }}"
   mutation:
     runs-on: ubuntu-latest
     steps:

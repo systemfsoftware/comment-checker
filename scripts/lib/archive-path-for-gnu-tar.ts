@@ -9,5 +9,9 @@ export function archivePathForGnuTar(absPath: string): string {
 }
 
 export function gnuTarCreateArgs(archivePath: string, member: string): string[] {
-  return ['--force-local', '-czf', archivePathForGnuTar(archivePath), member]
+  const dest = archivePathForGnuTar(archivePath)
+  if (DRIVE_ABS.test(archivePath)) {
+    return ['--force-local', '-czf', dest, member]
+  }
+  return ['-czf', dest, member]
 }
