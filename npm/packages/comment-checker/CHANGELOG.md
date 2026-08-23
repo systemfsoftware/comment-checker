@@ -15,3 +15,7 @@
 ## 0.1.4
 
   - Release v0.1.2 with pinned rust-toolchain, cross-platform scripts, direct shebang execution, and automated GitHub releases.
+
+## 0.1.5
+
+  - Fix Windows artifact upload path and execute full release pipeline.
