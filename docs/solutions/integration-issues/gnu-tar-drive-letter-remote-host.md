@@ -82,8 +82,7 @@ The rehearsal invariant is identity of argv *shape* with release, not identity o
 
 ## Prevention
 
-- Unit-test `archivePathForGnuTar` / `gnuTarCreateArgs` on the observed `D:\a\…\comment-checker-x86_64-pc-windows-msvc.tar.gz` string. Mutating away the rewrite or the gated flag must fail that suite.
-- On `pull_request`, run stage + bundle with relative `dist/release-tarball-<suffix>` and `target/<triple>/release`, including a `windows-2022` row, and require `tar -tzf` to emit the matrix bin name.
+- On `pull_request`, run stage + bundle with the same relative out-dir and bin-dir the release job uses, including a `windows-2022` row. That job failing is the gate.
 - Do not treat an MSYS `/d/…` rehearsal as coverage of the drive-letter branch.
 
 ## Related
