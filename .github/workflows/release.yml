@@ -33,7 +33,7 @@ jobs:
       phase: ${{ steps.plan.outputs.phase }}
       version: ${{ steps.plan.outputs.version }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -53,7 +53,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           # checkout v5 defaults persist-credentials to false; the release PR
@@ -88,7 +88,7 @@ jobs:
       contents: write
       id-token: write
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           # checkout v5 defaults persist-credentials to false; tag-released-packages
@@ -116,7 +116,7 @@ jobs:
         run: pnpm --filter @systemfsoftware/claude-code-comment-checker publish --provenance --access public --no-git-checks
 
       - name: Download staged platform packages
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: platform-stage-*
           path: stages
@@ -128,7 +128,7 @@ jobs:
         run: ./scripts/tools/tag-released-packages.ts
 
       - name: Download platform artifacts
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: release-*
           path: release-assets
