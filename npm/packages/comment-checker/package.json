@@ -23,7 +23,7 @@
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "devDependencies": {
-    "@effect/platform-node": "4.0.0-rc.108",
+    "@effect/platform-node": "4.0.0-rc.111",
     "@types/node": "latest",
     "effect": "4.0.0-rc.108",
     "oxlint": "latest",
