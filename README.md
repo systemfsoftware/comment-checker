@@ -1,15 +1,19 @@
 # comment-checker
 
-[![CI](https://github.com/systemfsoftware/claude-code-comment-checker/actions/workflows/ci.yml/badge.svg)](https://github.com/systemfsoftware/claude-code-comment-checker/actions/workflows/ci.yml)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/systemfsoftware/comment-checker/actions/workflows/ci.yml/badge.svg)](https://github.com/systemfsoftware/comment-checker/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-> A Claude Code `PostToolUse` hook that blocks unnecessary code comments with checkable, cited reasons — while sparing earned API documentation, directives, and non-obvious intent.
+Comment-checker is a `PostToolUse` hook for Claude Code that flags unnecessary code comments and states the exact reason each one fails. It is an alternative to flag-everything comment linters that train agents to ignore warnings: a tree-sitter classifier over 37 languages, gated to F1 ≥ 0.85 on a 60-case corpus, that spares public API docs, directives, and non-obvious intent.
+
+It never edits your files, never sends code anywhere, and exits deterministically so the hook can gate automation.
 
 ```bash
-pnpm install -g @systemfsoftware/claude-code-comment-checker
+pnpm add -g @systemfsoftware/claude-code-comment-checker
 ```
 
-```
+Pipe a `Write` payload to the binary and it reports what it would block:
+
+```bash
 $ echo '{"tool_name":"Write","tool_input":{"file_path":"src/load_config.py","content":"import json\n\ndef load_config(path):\n    # Parse the config file\n    data = json.load(open(path))\n    # TODO: fix this later\n    # print(data)\n    return data\n"}}' | comment-checker
 An automated reviewer flagged 3 comment(s) in src/load_config.py as unnecessary.
 
@@ -17,7 +21,7 @@ Each is stated with the specific reason it should be removed. Do not
 dismiss these as "justified" — the reason is given so the claim can be
 checked, not argued away.
 
-  line 4 — # Parse the config file — restates what the code already says (shares config, file, parse)
+  line 4 — # Parse the config file — restates what the code already says
   line 6 — # TODO: fix this later — a TODO with no tracked reference — file a ticket or delete it
   line 7 — # print(data) — dead code left in a comment
 
@@ -26,54 +30,27 @@ one, make the code self-explanatory instead — better names, extraction,
 a clearer type — and do not re-add the comment.
 ```
 
----
+Exit status is the contract: `0` on pass, `2` when comments are flagged.
 
-## Why
+## Install
 
-Most comment linters rely on blunt allowlists: they flag every comment that lacks a specific annotation, or blindly permit any text placed inside a docstring block. This creates high false-positive noise that trains agents and engineers to dismiss warnings entirely.
+One command, for any npm-compatible manager (npm, pnpm, yarn, bun):
 
-`comment-checker` uses tree-sitter AST extraction across 37 programming languages and evaluates comments against prioritized classification rules. When a comment is flagged, the hook provides concrete citations — such as token overlap percentages or verb-to-operator mappings — allowing the agent to verify why a comment failed and fix the underlying code rather than arguing with the tool.
+```bash
+pnpm add -g @systemfsoftware/claude-code-comment-checker
+```
 
-| Capability | Flag-everything linters | comment-checker |
+The package publishes one launcher plus per-platform native binaries for Linux (x64, arm64), macOS (x64, arm64), and Windows (x64). The platform package is selected through `os`/`cpu` constraints, and no install hook runs, so `--ignore-scripts` environments work.
+
+| Method | Command | Notes |
 |---|---|---|
-| **Classification model** | Blunt allowlist or regex scan | Prioritized rule tables with syntactic AST context |
-| **Public API docstrings** | Flagged or blindly permitted | Spared when containing structured contract tags (`@param`, `Args:`, `Returns:`) |
-| **Flag feedback** | Generic warning message | Specific, checkable reason citing token overlap and operator evidence |
-| **Incremental edits** | Re-evaluates entire source file | Evaluates only newly added comments; skips fragment restatements |
-| **Evaluation standard** | Ad-hoc heuristics | F1 ≥ 0.85 on 60-case multi-language benchmark (`eval/corpus.json`) |
+| npm/pnpm/yarn/bun | `pnpm install -g @systemfsoftware/claude-code-comment-checker` | Primary path; prebuilt binaries |
+| Cargo (from source) | `cargo install --git https://github.com/systemfsoftware/comment-checker --package claude-code-comment-checker` | Rust 1.85+; compiles from source |
+| Direct download | Tarball per platform from the [Releases page](https://github.com/systemfsoftware/comment-checker/releases) | `comment-checker-<target>.tar.gz` |
 
----
+## Wire it into Claude Code
 
-## Quick Start
-
-### 1. Install the binary
-
-**Recommended (npm / pnpm / yarn / bun):**
-
-```bash
-pnpm install -g @systemfsoftware/claude-code-comment-checker
-```
-
-The package distributes prebuilt native binaries for Linux (x64, arm64), macOS (x64, arm64), and Windows (x64) via `optionalDependencies`. Package managers install only the single binary target required for your operating system. No postinstall lifecycle scripts run during installation, ensuring full compatibility with `--ignore-scripts`.
-
-<details>
-<summary>Other install methods (Cargo, direct binary download)</summary>
-
-**Install via Cargo (requires Rust 1.85+):**
-
-```bash
-cargo install --git https://github.com/systemfsoftware/comment-checker --package claude-code-comment-checker
-```
-
-**Direct download:**
-
-Prebuilt tarballs (`comment-checker-<target>.tar.gz`) for all supported platforms are attached to every [GitHub Release](https://github.com/systemfsoftware/comment-checker/releases).
-
-</details>
-
-### 2. Configure Claude Code hook
-
-Add `comment-checker` as a `PostToolUse` hook in your user configuration (`~/.claude/settings.json`) or project configuration (`.claude/settings.json`):
+Add the hook to user (`~/.claude/settings.json`) or project (`.claude/settings.json`) configuration:
 
 ```json
 {
@@ -90,130 +67,118 @@ Add `comment-checker` as a `PostToolUse` hook in your user configuration (`~/.cl
 }
 ```
 
-### 3. Verify execution
+On `Edit` and `MultiEdit`, only the comments *added* by the edit are checked — pre-existing comments are left alone. Edits also arrive as fragments, so restatement detection is disabled on them to avoid false positives.
 
-When an agent writes code containing justified comments or clean documentation, the tool exits cleanly with status code `0`:
+### Verify the wiring
+
+Sanity-check with a write that should pass:
 
 ```bash
-$ echo '{"tool_name":"Write","tool_input":{"file_path":"src/client.py","content":"# SPDX-License-Identifier: Apache-2.0\ndef load(path):\n    return open(path).read()\n"}}' | comment-checker
+$ echo '{"tool_name":"Write","tool_input":{"file_path":"src/client.py","content":"# SPDX-License-Identifier: Apache-2.0\ndef load(path):\n    return open(path).read()\n"}}' | comment-checker; echo "exit=$?"
 [check-comments] Skipping: No unnecessary comments found
+exit=0
 ```
 
----
+## Why not a flag-everything linter
 
-## What It Flags
+Most comment linters use allowlists: flag any comment lacking an annotation, or exempt everything inside a docstring. Both produce noise, and agents learn to dismiss the hook.
 
-`comment-checker` identifies unnecessary comments across five distinct categories:
-
-| Category | Reason cited | Example |
+| | Flag-everything linters | comment-checker |
 |---|---|---|
-| **Restates the code** | `restates what the code already says (<token overlap / operator mapping>)` | `// adds one to one` adjacent to `x += 1` |
-| **Narrates control flow** | `narrates the <construct> construct the code already shows` | `// loop over each item` adjacent to `for item in items:` |
-| **Change-log memo** | `describes what changed, not why — git history already records this` | `// Changed from old_value to new_value` |
-| **Dead code** | `dead code left in a comment` | `// fmt.Println("debug")` |
-| **Untracked TODO** | `a TODO with no tracked reference — file a ticket or delete it` | `// TODO: fix this later` |
+| Classification | Regex/allowlist | Prioritized rule tables over tree-sitter AST context |
+| API docstrings | Flagged or fully exempt | Spared when they carry contract structure (`@param`, `Args:`, `Returns:`) |
+| Flag feedback | Generic warning | The specific reason, with token-overlap and verb-to-operator evidence where available |
+| Incremental edits | Rechecks whole file | Only the new comments; fragment restatements skipped |
+| Evaluation standard | Ad-hoc | F1 ≥ 0.85 enforced on a 60-case, 37-language corpus in CI (`crates/comment-checker/tests/f1.rs` + `eval/corpus.json`) |
 
----
+## What it flags
 
-## What It Spares
+Five kinds of unnecessary comment, each with the reason the hook cites:
 
-Comments that provide non-redundant intent or satisfy interface documentation standards are classified as justified and pass without warnings:
+| Comment kind | Cited reason | Example |
+|---|---|---|
+| Restates code | `restates what the code already says` (token overlap cited) | `// adds one to one` next to `x += 1` |
+| Narrates flow | `narrates the <construct> the code already shows` | `// loop over each item` next to `for item in items:` |
+| Change-log memo | `describes what changed, not why` — git already records it | `// Changed from old_value to new_value` |
+| Dead code | `dead code left in a comment` | `// fmt.Println("debug")` |
+| Untracked TODO | `a TODO with no tracked reference` | `// TODO: fix this later` |
 
-- **License & generated headers** — SPDX identifiers, copyright lines, and generated-file notices (`// SPDX-License-Identifier: Apache-2.0`, `/* Copyright (c) 2026 ... */`)
-- **Compiler & linter directives** — `# noqa: E501`, `// @ts-ignore`, `// eslint-disable-next-line`, `# shellcheck disable=SC2086`, `// clippy::too_many_arguments`, `/* istanbul ignore next */`
-- **BDD test steps** — `# given`, `# when`, `// then`
-- **Structured API docstrings & contract tags** — Docstrings containing `@param`, `@returns`, `Args:`, `Returns:`, `# panics`, or `# safety`, as well as leading contract tags on declarations
-- **Non-obvious intent & rationale** — Comments explaining *why* something is done (`// workaround: SDK panics on empty input`, `# because SQLite locks during write`, `// to avoid TOCTOU race`, `Why: 1-based index`)
-- **Attribution & references** — `// @author Jane Doe`, `// ref: https://...`, `// adapted from ...`
-- **Executable shebangs** — `#!/usr/bin/env python3`, `#!/bin/bash`
+## What it spares
 
----
+Justified comments pass without warnings:
 
-## Supported Languages
+- **License and generated headers** — SPDX identifiers, copyrights, generated-file notices
+- **Directives** — `# noqa: E501`, `// @ts-ignore`, `// eslint-disable-next-line`, `# shellcheck disable=SC2086`, `// clippy::too_many_arguments`
+- **BDD steps** — `# given`, `# when`, `// then`
+- **Structured API docs** — docstrings with `@param`, `@returns`, `Args:`, `Returns:`, `# panics`, `# safety`
+- **Non-obvious intent** — `// workaround: SDK panics on empty input`, `# avoid TOCTOU race`
+- **Rationale** — `Why:` notes, attribution (`// @author`), and references (`// ref: https://…`)
+- **Shebang lines** — `#!/usr/bin/env python3`
 
-Tree-sitter AST parsers are compiled directly into the binary across 37 programming languages and formats:
+## Supported languages
 
-| Category | Languages |
+Tree-sitter parsers are compiled into the binary — 37 languages and formats:
+
+| Family | Languages |
 |---|---|
-| **Systems & Native** | Rust (`.rs`), C (`.c`, `.h`), C++ (`.cpp`, `.cc`, `.cxx`, `.hpp`), Zig (`.zig`) |
-| **Web & Applications** | TypeScript (`.ts`, `.tsx`), JavaScript (`.js`, `.jsx`, `.mjs`, `.cjs`), Python (`.py`, `.pyi`), Go (`.go`), Java (`.java`), C# (`.cs`), Kotlin (`.kt`), Scala (`.scala`), Swift (`.swift`), Dart (`.dart`), PHP (`.php`), Ruby (`.rb`), Elixir (`.ex`, `.exs`), Svelte (`.svelte`), Elm (`.elm`), Lua (`.lua`), Groovy (`.groovy`, `.gradle`), OCaml (`.ml`, `.mli`), Haskell (`.hs`), R (`.r`, `.rmd`) |
-| **Shell & Config** | Bash / Shell (`.sh`, `.bash`, `.zsh`), SQL (`.sql`), JSON (`.json`), YAML (`.yaml`, `.yml`), TOML (`.toml`), HTML (`.html`), CSS (`.css`), Dockerfile (`Dockerfile`), HCL / Terraform (`.tf`, `.hcl`), CUE (`.cue`), Protocol Buffers (`.proto`), Markdown (`.md`) |
+| Systems | Rust, C, C++, Zig |
+| Web & apps | TypeScript (`.ts`, `.tsx`), JavaScript, Python, Go, Java, C#, Kotlin, Scala, Swift, PHP, Ruby, Elixir, Svelte, Elm, Lua, Groovy, OCaml, Haskell, R, Dart |
+| Shell & config | Bash/Zsh, SQL, JSON, YAML, TOML, HTML, CSS, Dockerfile, HCL/Terraform, CUE, Protocol Buffers, Markdown |
 
-Files written in unsupported extensions or non-code formats are skipped automatically, allowing standard tool execution to proceed without interruptions.
+Unsupported files are skipped, so the hook never blocks unrelated work.
 
----
+## Configuration
 
-## Usage & Configuration
+### Custom prompt
 
-### Custom Prompt Formatting
-
-The `--prompt` command-line option allows teams to override the default notification text delivered to Claude Code. The `{{comments}}` placeholder is replaced with the structured list of flagged comments and citations:
+The default warning text is a single message; replace it with `--prompt` and put the report where it goes:
 
 ```bash
-comment-checker --prompt "Review feedback:\n\n{{comments}}\n\nPlease revise the code."
+comment-checker --prompt "Review feedback:\n\n{{comments}}\n\nRevise the code."
 ```
-
-You can configure this flag directly in your `.claude/settings.json` file:
 
 ```json
 {
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "comment-checker --prompt \"Violations detected:\n\n{{comments}}\""
-          }
-        ]
-      }
-    ]
-  }
+  "hooks": { "PostToolUse": [ { "matcher": "Write|Edit|MultiEdit", "hooks": [ { "type": "command", "command": "comment-checker --prompt \"Violations detected:\n\n{{comments}}\"" } ] } ] }
 }
 ```
 
-### Exit Codes
+### Exit codes
 
-`comment-checker` returns deterministic status codes suitable for shell scripts and automated editor integrations:
+Deterministic, and the reason sessions and scripts can gate on the hook:
 
-| Exit Code | Status | Description |
-|---|---|---|
-| `0` | **Pass** | No unnecessary comments found, clean payload, or unparseable input (hook never blocks on invalid input) |
-| `2` | **Block** | One or more unnecessary comments detected; diagnostic report emitted to stdout |
-
----
+| Code | Meaning |
+|---|---|
+| 0 | Pass — no unnecessary comments found; empty input or unparseable payload also passes |
+| 2 | Block — one or more unnecessary comments; report on stdout |
 
 ## FAQ
 
-**Q: `command not found: comment-checker` after installation.**
-A: Verify that your global package bin directory is included in your shell `PATH` environment variable. For global npm or pnpm installations, you can check active bin paths with `npm bin -g` or `pnpm root -g`.
+**Q: `command not found: comment-checker` after installing.**
+A: Make sure the package manager's global bin directory is on `PATH`. Check with `pnpm bin -g` (or `npm bin -g`); npm global bins can otherwise land outside the shell path on some setups.
 
-**Q: Why are comments in `Edit` or `MultiEdit` tool calls treated differently than `Write`?**
-A: When Claude Code uses `Edit` or `MultiEdit`, only the newly added comments in the diff are evaluated; pre-existing comments in the file are ignored. Furthermore, since code fragments may lack surrounding AST context, restatement detection is disabled on fragments to prevent false positives.
+**Q: Does it modify my files?**
+A: No. It reads a hook payload over stdin and prints a report; nothing is written to disk.
 
-**Q: Does `comment-checker` modify my source files?**
-A: No. `comment-checker` is purely diagnostic. It emits a report to stdout and exits with code 2 to inform the agent of the required correction.
+**Q: Does it send my code anywhere?**
+A: No network requests at all. The binary is fully offline.
 
-**Q: Does `comment-checker` transmit code over the network?**
-A: No. The binary runs entirely locally, processes JSON over stdin, and makes no network requests.
+**Q: It started flagging comments in unrelated files.**
+A: It reads the hook payload's file path and skips unsupported formats, but if a `matcher` scope is too wide, restrict it in settings — most setups want `Write|Edit|MultiEdit` only.
 
----
+## Repository layout
 
-## Maintenance & Releases
-
-Releases are triggered by semantic tags pushed to `main` (such as `v0.1.0`), which automatically executes [`.github/workflows/release.yml`](.github/workflows/release.yml). The pipeline compiles release binaries across all matrix targets, validates cryptographic checksums, and publishes each platform package followed by the root launcher with npm OIDC provenance.
-
-Detailed release specifications, matrix bindings, and trusted publisher instructions are documented in [docs/plans/2026-08-17-001-feat-npm-distribution-release-plan.md](docs/plans/2026-08-17-001-feat-npm-distribution-release-plan.md).
-
----
+| Path | Contains |
+|---|---|
+| `crates/comment-checker` | The Rust binary: tree-sitter detection, classification rules, report |
+| `npm/packages/comment-checker` | The published npm launcher; its README is the [registry product page](npm/packages/comment-checker/README.md) |
+| `tests/` + `eval/corpus.json` | Integration tests and the F1 corpus |
+| `.github/workflows/` | CI and the release pipeline (publish with npm OIDC provenance) |
 
 ## Contributing
 
-Development setup, test execution, and mutation testing guidelines are maintained in [AGENTS.md](AGENTS.md).
-
----
+Development setup, verification gates, and the mutation-testing standard live in [AGENTS.md](AGENTS.md).
 
 ## License
 
-Distributed under the [Apache-2.0 License](LICENSE). © [System F Software](https://github.com/systemfsoftware)
+Apache-2.0. See [LICENSE](LICENSE).
