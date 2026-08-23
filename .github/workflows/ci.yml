@@ -9,7 +9,7 @@ jobs:
   gate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       # Stock rust-lang toolchain through rustup with clippy and rustfmt components
       - uses: actions-rust-lang/setup-rust-toolchain@0267444136ce4919088f5eae0461f736f21356de # v1
@@ -17,7 +17,7 @@ jobs:
           toolchain: stable
           components: clippy, rustfmt
       - name: Cache cargo build
-        uses: actions/cache@v4
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
             ~/.cargo/registry
@@ -38,13 +38,13 @@ jobs:
   npm:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6
         with:
           version: 11.21.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
 
@@ -59,12 +59,11 @@ jobs:
       - name: Build + typecheck (launcher)
         run: pnpm build && pnpm typecheck
 
+      # Same invocation developers run locally, so a workflow defect is caught
+      # before the push. release.yml never runs on a pull request, so this is
+      # the only gate that reads it.
       - name: Lint GitHub Actions workflows (issue #9)
-        uses: rhysd/actionlint@v1.7.12
-        with:
-          paths: |
-            .github/workflows/ci.yml
-            .github/workflows/release.yml
+        run: ./scripts/tools/lint-workflows.ts
 
       - name: Release scripts lint + tests + matrix agreement (deno)
         run: |
@@ -113,20 +112,45 @@ jobs:
           archive="dist/release-tarball-${{ matrix.suffix }}/comment-checker-${{ matrix.target }}.tar.gz"
           test -f "$archive"
           tar -tzf "$archive" | grep -Fx "${{ matrix.bin }}"
+  tools:
+    name: tools · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-2022]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
+
+      - name: Shebang tools execute on this runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$(./scripts/tools/plan-release.ts)"
+          printf '%s\n' "$out"
+          grep -q '^phase=' <<<"$out" || {
+            echo "shebang invocation produced no output on ${{ matrix.os }}" >&2
+            exit 1
+          }
   mutation:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - uses: actions-rust-lang/setup-rust-toolchain@0267444136ce4919088f5eae0461f736f21356de # v1
         with:
           toolchain: stable
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6
         with:
           version: 11.21.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
 
@@ -136,7 +160,7 @@ jobs:
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Cache turbo verdicts
-        uses: actions/cache@v4
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.toml', 'Cargo.lock', '.cargo/config.toml', 'crates/comment-checker/**', 'package.json', 'turbo.json') }}
@@ -144,7 +168,7 @@ jobs:
             turbo-${{ runner.os }}-
 
       - name: Cache cargo build (mutants miss path)
-        uses: actions/cache@v4
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
             ~/.cargo/registry
@@ -154,7 +178,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Cache pnpm store
-        uses: actions/cache@v4
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ~/.local/share/pnpm/store
           key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}

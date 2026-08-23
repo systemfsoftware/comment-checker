@@ -12,7 +12,9 @@
     "check:publish": "./tools/check-publish.ts",
     "publish:unpublished": "./tools/publish-and-setup-npm-trust.ts",
     "lint": "deno lint --config ./deno.jsonc .",
-    "test": "deno test --config ./deno.jsonc --allow-read --allow-write --allow-run=tar --allow-env"
+    "test": "deno test --config ./deno.jsonc --allow-read --allow-write --allow-run=tar --allow-env",
+    "lint:workflows": "./tools/lint-workflows.ts",
+    "plan:release": "./tools/plan-release.ts"
   },
   "fmt": {
     "lineWidth": 100,
