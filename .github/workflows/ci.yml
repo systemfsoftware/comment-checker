@@ -65,12 +65,53 @@ jobs:
       - name: Lint GitHub Actions workflows (issue #9)
         run: ./scripts/tools/lint-workflows.ts
 
-      - name: Release scripts lint + matrix agreement gate (deno)
+      - name: Release scripts lint + tests + matrix agreement (deno)
         run: |
           cd scripts
           deno task lint
+          deno task test
           deno task check-matrix
 
+  packaging:
+    name: packaging · ${{ matrix.suffix }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            suffix: linux-x64
+            runner: ubuntu-latest
+            bin: comment-checker
+          - target: x86_64-pc-windows-msvc
+            suffix: win32-x64
+            runner: windows-2022
+            bin: comment-checker.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
+
+      - name: Fixture binary + packaging rehearsal
+        shell: bash
+        run: |
+          mkdir -p \
+            "target/${{ matrix.target }}/release" \
+            "dist/staging/platform-${{ matrix.suffix }}" \
+            "dist/release-tarball-${{ matrix.suffix }}"
+          printf '%s\n' fixture > "target/${{ matrix.target }}/release/${{ matrix.bin }}"
+          ./scripts/tools/stage-platform-package.ts \
+            --target ${{ matrix.target }} \
+            --suffix ${{ matrix.suffix }} \
+            --stage "dist/staging/platform-${{ matrix.suffix }}" \
+            --bin-dir "target/${{ matrix.target }}/release"
+          ./scripts/tools/bundle-release-tarball.ts \
+            --target ${{ matrix.target }} \
+            --bin-dir "target/${{ matrix.target }}/release" \
+            --out-dir "dist/release-tarball-${{ matrix.suffix }}"
+          archive="dist/release-tarball-${{ matrix.suffix }}/comment-checker-${{ matrix.target }}.tar.gz"
+          test -f "$archive"
+          tar -tzf "$archive" | grep -Fx "${{ matrix.bin }}"
   tools:
     name: tools · ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -96,7 +137,6 @@ jobs:
             echo "shebang invocation produced no output on ${{ matrix.os }}" >&2
             exit 1
           }
-
   mutation:
     runs-on: ubuntu-latest
     steps:
