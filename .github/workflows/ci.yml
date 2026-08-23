@@ -59,12 +59,16 @@ jobs:
       - name: Build + typecheck (launcher)
         run: pnpm build && pnpm typecheck
 
+      # rhysd/actionlint ships no action.yml -- only a Dockerfile -- so GitHub
+      # treats it as an implicit Docker action whose only inputs are
+      # entryPoint/args. A `paths:` input is silently discarded, which left this
+      # gate linting the container default instead of the files named here.
+      # Run the pinned image directly so the arguments are the contract.
       - name: Lint GitHub Actions workflows (issue #9)
-        uses: rhysd/actionlint@v1.7.12
-        with:
-          paths: |
-            .github/workflows/ci.yml
-            .github/workflows/release.yml
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo \
+            docker.io/rhysd/actionlint@sha256:9d36088643581e728c969f35141f88139fec77280b2be23c1f66f8e40e1025e7 \
+            -color .github/workflows/ci.yml .github/workflows/release.yml
 
       - name: Release scripts lint + matrix agreement gate (deno)
         run: |
