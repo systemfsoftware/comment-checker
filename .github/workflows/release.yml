@@ -193,14 +193,15 @@ jobs:
           # pushes tags with plain git, which needs the stored credential.
           persist-credentials: true
 
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6
+        with:
+          version: 11.21.0
+
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-
-      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6
-        with:
-          version: 11.21.0
+          cache: pnpm
 
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
 
