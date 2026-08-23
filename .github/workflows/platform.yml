@@ -46,6 +46,7 @@ jobs:
             bin: comment-checker.exe
     steps:
       - name: Reject unknown mode
+        shell: bash
         run: |
           case "${{ inputs.mode }}" in
             rehearsal|release) exit 0 ;;
