@@ -11,3 +11,7 @@
 ## 0.1.3
 
   - Release v0.1.2 with cross-platform release scripts and automated GitHub releases.
+
+## 0.1.4
+
+  - Release v0.1.2 with pinned rust-toolchain, cross-platform scripts, direct shebang execution, and automated GitHub releases.
