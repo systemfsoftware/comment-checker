@@ -5,7 +5,8 @@
     "jsr:@std/cli@1.0.15": "1.0.15",
     "jsr:@std/internal@^1.0.14": "1.0.14",
     "jsr:@std/path@1.1.6": "1.1.6",
-    "jsr:@std/yaml@1.0.4": "1.0.4"
+    "jsr:@std/yaml@1.0.4": "1.0.4",
+    "npm:arktype@2.2.3": "2.2.3"
   },
   "jsr": {
     "@libs/diff@4.0.0": {
@@ -27,12 +28,38 @@
       "integrity": "f1e38fa5e110ff8550e938715e52c33347676dd00a1db858e092dd21a9df9941"
     }
   },
+  "npm": {
+    "@ark/schema@0.56.2": {
+      "integrity": "sha512-Qx4D2JFbBWpntiHZaTv7bGG4H/M2rigiknezKg/WVyDSaLdE4YCcWAOoFB7pjjDqHbbV2OqRfntm1nnXvwMexg==",
+      "dependencies": [
+        "@ark/util"
+      ]
+    },
+    "@ark/util@0.56.2": {
+      "integrity": "sha512-9kU2sUE38FZEGG7l3hamYMBieLYEJh2L1mrYD2eXpT+78EnQSV1bhjxJhnxGBMSTbtwpBSDNSK+K60WvaI/DTQ=="
+    },
+    "arkregex@0.0.8": {
+      "integrity": "sha512-PJcx6G1kQTgLKPUbeYlYecDRaKq15AMSGVajlKFYWlPeJRQL+j3dKE6tyMs40HZ99djS1l9Vhl3ezAHy9JBIqQ==",
+      "dependencies": [
+        "@ark/util"
+      ]
+    },
+    "arktype@2.2.3": {
+      "integrity": "sha512-7W+0RLTUNJiBFIIZXwOQxSR8Z273IAd6IvqBeG9+gHnQKFsIx2C0iOtGTmMrPnlX4qLXyc5+ll7A0BIj9WrbTg==",
+      "dependencies": [
+        "@ark/schema",
+        "@ark/util",
+        "arkregex"
+      ]
+    }
+  },
   "workspace": {
     "dependencies": [
       "jsr:@libs/diff@4.0.0",
       "jsr:@std/cli@1.0.15",
       "jsr:@std/path@1.1.6",
-      "jsr:@std/yaml@1.0.4"
+      "jsr:@std/yaml@1.0.4",
+      "npm:arktype@2.2.3"
     ]
   }
 }
