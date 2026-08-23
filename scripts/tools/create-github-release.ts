@@ -38,23 +38,40 @@ try {
 
 const binaryFiles: string[] = []
 for (const target of targets) {
-  const tarName = `release-assets/release-${target.suffix}/comment-checker-${target.target}.tar.gz`
-  try {
-    const stat = await Deno.stat(tarName)
-    if (stat.isFile) {
-      binaryFiles.push(tarName)
-    }
-  } catch {
-    const flatName = `release-assets/comment-checker-${target.target}.tar.gz`
+  const candidates = [
+    // download-artifact with pattern release-* preserves the uploaded path:
+    //   dist/release-tarball-<suffix>/comment-checker-<target>.tar.gz
+    // inside release-assets/release-<suffix>/, so the real file is:
+    `release-assets/release-${target.suffix}/dist/release-tarball-${target.suffix}/comment-checker-${target.target}.tar.gz`,
+    // legacy / flat fallbacks (never hide a missing tarball as 0-bin release)
+    `release-assets/release-${target.suffix}/comment-checker-${target.target}.tar.gz`,
+    `release-assets/comment-checker-${target.target}.tar.gz`,
+  ]
+  let found: string | null = null
+  for (const p of candidates) {
     try {
-      const statFlat = await Deno.stat(flatName)
-      if (statFlat.isFile) {
-        binaryFiles.push(flatName)
+      const stat = await Deno.stat(p)
+      if (stat.isFile) {
+        found = p
+        break
       }
     } catch {
-      // ignore
+      // try next candidate
     }
   }
+  if (found) {
+    binaryFiles.push(found)
+  } else {
+    console.error(`create-github-release: missing tarball for ${target.target} (tried ${candidates.join(', ')})`)
+  }
+}
+if (binaryFiles.length === 0) {
+  console.error('create-github-release: no binary tarballs found — refusing to create an empty release')
+  Deno.exit(1)
+}
+if (binaryFiles.length !== targets.length) {
+  console.error(`create-github-release: expected ${targets.length} tarballs, found ${binaryFiles.length}`)
+  Deno.exit(1)
 }
 
 const tag = `v${version}`
