@@ -1,16 +1,24 @@
 #!/usr/bin/env -S deno run --allow-read --allow-run=docker,podman --allow-env=WORKFLOW_LINT_RUNTIME
 
-import { RELEASE_WORKFLOW_PATH } from '../lib/shared.ts'
 import { join, relative } from '@std/path'
 
 const IMAGE =
   'docker.io/rhysd/actionlint@sha256:9d36088643581e728c969f35141f88139fec77280b2be23c1f66f8e40e1025e7'
 
 const repoRoot = join(import.meta.dirname!, '..', '..')
-const workflows = [
-  relative(repoRoot, join(repoRoot, '.github', 'workflows', 'ci.yml')),
-  relative(repoRoot, RELEASE_WORKFLOW_PATH),
-]
+const workflowsDir = join(repoRoot, '.github', 'workflows')
+
+const workflows: string[] = []
+for await (const entry of Deno.readDir(workflowsDir)) {
+  if (entry.isFile && (entry.name.endsWith('.yml') || entry.name.endsWith('.yaml'))) {
+    workflows.push(relative(repoRoot, join(workflowsDir, entry.name)))
+  }
+}
+workflows.sort()
+if (workflows.length === 0) {
+  console.error('lint-workflows: no workflow files under .github/workflows')
+  Deno.exit(1)
+}
 
 async function firstAvailable(candidates: string[]): Promise<string | undefined> {
   for (const bin of candidates) {

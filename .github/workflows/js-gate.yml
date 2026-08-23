@@ -1,0 +1,36 @@
+name: JS gate
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: ./.github/actions/setup-pnpm-node
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
+
+      - name: Install JS deps (frozen)
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build + typecheck (launcher)
+        run: pnpm build && pnpm typecheck
+
+      - name: Lint GitHub Actions workflows (issue #9)
+        run: ./scripts/tools/lint-workflows.ts
+
+      - name: Release scripts lint + matrix agreement (deno)
+        run: |
+          cd scripts
+          deno task lint
+          deno task check-matrix

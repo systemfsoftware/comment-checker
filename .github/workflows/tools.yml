@@ -1,0 +1,35 @@
+name: Tools
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  tools:
+    name: tools · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-2022]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
+
+      - name: Shebang tools execute on this runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$(./scripts/tools/plan-release.ts)"
+          printf '%s\n' "$out"
+          grep -q '^phase=' <<<"$out" || {
+            echo "shebang invocation produced no output on ${{ matrix.os }}" >&2
+            exit 1
+          }

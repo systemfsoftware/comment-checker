@@ -7,18 +7,18 @@ export interface MatrixRow {
 }
 
 /**
- * Extract the release matrix include rows (target + suffix + runner) from a
- * workflow document by parsing YAML, not scraping text (issue #8).
+ * Extract matrix include rows (target + suffix + runner) from a workflow
+ * document by parsing YAML, not scraping text (issue #8).
  *
  * Formatting cannot break agreement: flow-style lists, quoted keys or values,
  * key reordering, and comments all parse to the same typed rows. Only the
- * job named `release` is consulted, so a decoy matrix-bearing job elsewhere
- * in the workflow cannot satisfy the gate (issue #8 refit). Every include
- * row must carry string target/suffix/runner; a missing or non-conforming
- * row, an empty include, a missing `release` job, or malformed YAML throws —
- * the gate must fail loudly rather than compare against a silent subset.
+ * named job is consulted, so a decoy matrix-bearing job elsewhere in the
+ * workflow cannot satisfy the gate (issue #8 refit). Every include row must
+ * carry string target/suffix/runner; a missing or non-conforming row, an
+ * empty include, a missing job, or malformed YAML throws — the gate must
+ * fail loudly rather than compare against a silent subset.
  */
-export function matrixRows(workflowText: string): MatrixRow[] {
+export function matrixRows(workflowText: string, jobName = 'platform'): MatrixRow[] {
   const doc: unknown = parseYaml(workflowText)
   if (typeof doc !== 'object' || doc === null) {
     throw new Error('workflow document is not a mapping')
@@ -27,24 +27,24 @@ export function matrixRows(workflowText: string): MatrixRow[] {
   if (typeof jobs !== 'object' || jobs === null) {
     throw new Error('workflow has no jobs mapping')
   }
-  const releaseJob = (jobs as Record<string, unknown>).release
-  if (typeof releaseJob !== 'object' || releaseJob === null) {
-    throw new Error('workflow has no release job')
+  const job = (jobs as Record<string, unknown>)[jobName]
+  if (typeof job !== 'object' || job === null) {
+    throw new Error(`workflow has no ${jobName} job`)
   }
-  const strategy = (releaseJob as Record<string, unknown>).strategy
+  const strategy = (job as Record<string, unknown>).strategy
   if (typeof strategy !== 'object' || strategy === null) {
-    throw new Error('release job has no strategy')
+    throw new Error(`${jobName} job has no strategy`)
   }
   const matrix = (strategy as Record<string, unknown>).matrix
   if (typeof matrix !== 'object' || matrix === null) {
-    throw new Error('release job has no strategy.matrix')
+    throw new Error(`${jobName} job has no strategy.matrix`)
   }
   const include = (matrix as Record<string, unknown>).include
   if (!Array.isArray(include)) {
-    throw new Error('release job has no strategy.matrix.include')
+    throw new Error(`${jobName} job has no strategy.matrix.include`)
   }
   if (include.length === 0) {
-    throw new Error('release matrix include is empty')
+    throw new Error(`${jobName} matrix include is empty`)
   }
   const rows: MatrixRow[] = []
   for (const row of include) {

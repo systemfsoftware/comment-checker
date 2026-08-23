@@ -3,8 +3,10 @@ import { resolve } from '@std/path'
 import { parseCliArgs } from '../lib/cli.ts'
 import { matrixRows } from '../lib/matrix-rows.ts'
 import {
+  CI_WORKFLOW_PATH,
   LAUNCHER_MANIFEST_PATH,
   type LauncherManifest,
+  PLATFORM_WORKFLOW_PATH,
   RELEASE_WORKFLOW_PATH,
   type Target,
   TARGETS_PATH,
@@ -33,7 +35,7 @@ const manifestPath = typeof flags.manifestPath === 'string'
   : LAUNCHER_MANIFEST_PATH
 const workflowPath = typeof flags.workflowPath === 'string'
   ? resolve(flags.workflowPath)
-  : RELEASE_WORKFLOW_PATH
+  : PLATFORM_WORKFLOW_PATH
 
 async function readJsonOrExit(path: string, label: string): Promise<unknown> {
   try {
@@ -130,35 +132,35 @@ async function checkWorkflow(workflowPath: string, targets: Target[]) {
     const content = await Deno.readTextFile(workflowPath)
     // Typed YAML parse (issue #8): formatting variants (flow style, quoting,
     // key order) must not change what rows are seen, and any malformed or
-    // empty matrix — or a missing release job — throws inside matrixRows and
+    // empty matrix — or a missing platform job — throws inside matrixRows and
     // fails the gate instead of yielding an empty match set.
-    const workflowRows = matrixRows(content)
+    const workflowRows = matrixRows(content, 'platform')
     const tableRows = new Map(targets.map((t) => [t.target, t]))
     if (workflowRows.length !== targets.length) {
       fail(
-        `release.yml lists ${workflowRows.length} matrix rows; targets.json has ${targets.length}`,
+        `platform.yml lists ${workflowRows.length} matrix rows; targets.json has ${targets.length}`,
       )
     }
     for (const row of workflowRows) {
       const entry = tableRows.get(row.target)
       if (!entry) {
-        fail(`release.yml lists ${row.target}, which is not a row in targets.json`)
+        fail(`platform.yml lists ${row.target}, which is not a row in targets.json`)
         continue
       }
       if (row.suffix !== entry.suffix) {
         fail(
-          `release.yml lists ${row.target} with suffix ${row.suffix}, table says ${entry.suffix}`,
+          `platform.yml lists ${row.target} with suffix ${row.suffix}, table says ${entry.suffix}`,
         )
       }
       if (row.runner !== entry.runner) {
         fail(
-          `release.yml lists ${row.target} on runner ${row.runner}, table says ${entry.runner}`,
+          `platform.yml lists ${row.target} on runner ${row.runner}, table says ${entry.runner}`,
         )
       }
     }
     for (const entry of targets) {
       if (!workflowRows.some((row) => row.target === entry.target)) {
-        fail(`release.yml does not list release target ${entry.target}`)
+        fail(`platform.yml does not list release target ${entry.target}`)
       }
     }
   } catch (error) {
@@ -170,6 +172,20 @@ async function checkWorkflow(workflowPath: string, targets: Target[]) {
   }
 }
 
+async function checkCallerUsesPlatform(callerPath: string) {
+  try {
+    const text = await Deno.readTextFile(callerPath)
+    if (!text.includes('uses: ./.github/workflows/platform.yml')) {
+      fail(`${callerPath} does not call ./.github/workflows/platform.yml`)
+    }
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) {
+      fail(`missing caller workflow: ${callerPath}`)
+    } else {
+      fail(`cannot read ${callerPath}: ${String(error)}`)
+    }
+  }
+}
 const rawTargets = await readJsonOrExit(targetsPath, 'targets file')
 if (!Array.isArray(rawTargets)) {
   fail('targets table is not an array')
@@ -179,6 +195,8 @@ if (!Array.isArray(rawTargets)) {
 const rawManifest = await readJsonOrExit(manifestPath, 'launcher manifest')
 checkManifest(rawManifest as LauncherManifest, rawTargets as Target[])
 await checkWorkflow(workflowPath, rawTargets as Target[])
+await checkCallerUsesPlatform(CI_WORKFLOW_PATH)
+await checkCallerUsesPlatform(RELEASE_WORKFLOW_PATH)
 
 if (failures.length > 0) {
   for (const reason of failures) {
