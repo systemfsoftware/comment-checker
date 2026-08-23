@@ -1,5 +1,6 @@
 {
   "imports": {
+    "@libs/diff": "jsr:@libs/diff@4.0.0",
     "@std/cli": "jsr:@std/cli@1.0.15",
     "@std/path": "jsr:@std/path@1.1.6",
     "@std/yaml": "jsr:@std/yaml@1.0.4"
