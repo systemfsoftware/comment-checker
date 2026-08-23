@@ -8,7 +8,8 @@
     "build": "turbo build",
     "typecheck": "turbo typecheck",
     "lint": "turbo lint",
-    "mutants": "turbo mutants"
+    "mutants": "cargo mutants --file crates/comment-checker/src/classify.rs --timeout 90",
+    "gate:mutants": "turbo run //#mutants"
   },
   "devDependencies": {
     "@effect/tsgo": "latest",
