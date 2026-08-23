@@ -47,16 +47,16 @@
       ],
       "cache": true
     },
-    "mutants": {
+    "//#mutants": {
       "outputLogs": "new-only",
       "inputs": [
-        "$TURBO_ROOT$/rust-toolchain.toml",
-        "$TURBO_ROOT$/Cargo.toml",
-        "$TURBO_ROOT$/Cargo.lock",
-        "$TURBO_ROOT$/.cargo/config.toml",
-        "$TURBO_ROOT$/crates/comment-checker/Cargo.toml",
-        "$TURBO_ROOT$/crates/comment-checker/src/**",
-        "$TURBO_ROOT$/crates/comment-checker/tests/**"
+        "rust-toolchain.toml",
+        "Cargo.toml",
+        "Cargo.lock",
+        ".cargo/config.toml",
+        "crates/comment-checker/Cargo.toml",
+        "crates/comment-checker/src/**",
+        "crates/comment-checker/tests/**"
       ],
       "outputs": [],
       "cache": true
