@@ -61,30 +61,31 @@ fn edit_new_comment_blocks() {
 }
 
 #[test]
-fn edit_fragment_context_is_never_relied_upon() {
-    // U2 scenario: an Edit sees only the fragment, so a comment that would
-    // restate its adjacent code must NOT be convicted — the text-only floor
-    // downgrades, the hook passes, and the user is not blocked on context the
-    // fragment cannot vouch for.
+fn edit_new_restatement_with_code_after_it_blocks() {
     let input = r#"{"tool_name":"Edit","tool_input":{"file_path":"foo.py","old_string":"counter = 0\n","new_string":"counter = 0\n# increment the counter\ncounter += 1\n"}}"#;
-    assert!(
-        matches!(check(input, ""), Outcome::Pass { .. }),
-        "an Edit fragment whose context is unreliable must fall back, not convict"
-    );
+    assert!(matches!(check(input, ""), Outcome::Block { .. }));
 }
 
 #[test]
-fn multi_edit_new_restatement_comment_passes() {
-    // MultiEdit fragments share Edit's unreliable-context rule: a would-be
-    // restatement introduced by an edit is spared, not convicted.
-    let input = r#"{"tool_name":"MultiEdit","tool_input":{"file_path":"foo.py","edits":[{"old_string":"x = 1\n","new_string":"x = 1\n# increment the counter\ncounter += 1\n"}]}}"#;
+fn edit_comment_at_the_fragment_tail_passes() {
+    let input = r#"{"tool_name":"Edit","tool_input":{"file_path":"foo.py","old_string":"counter = 0\n","new_string":"counter = 0\n# increment the counter\n"}}"#;
     assert!(matches!(check(input, ""), Outcome::Pass { .. }));
 }
 
 #[test]
+fn edit_comment_with_no_adjacent_code_passes() {
+    let input = r##"{"tool_name":"Edit","tool_input":{"file_path":"foo.py","old_string":"","new_string":"# increment the counter\n"}}"##;
+    assert!(matches!(check(input, ""), Outcome::Pass { .. }));
+}
+
+#[test]
+fn multi_edit_new_restatement_comment_blocks() {
+    let input = r#"{"tool_name":"MultiEdit","tool_input":{"file_path":"foo.py","edits":[{"old_string":"x = 1\n","new_string":"x = 1\n# increment the counter\ncounter += 1\n"}]}}"#;
+    assert!(matches!(check(input, ""), Outcome::Block { .. }));
+}
+
+#[test]
 fn multi_edit_new_todo_comment_blocks() {
-    // Explicit text-only rules still block on MultiEdit: the unreliable
-    // downgrade only spares the restate fallback, never a real rule match.
     let input = r#"{"tool_name":"MultiEdit","tool_input":{"file_path":"foo.py","edits":[{"old_string":"x = 1\n","new_string":"x = 1\n# TODO: handle\n"}]}}"#;
     assert!(matches!(check(input, ""), Outcome::Block { .. }));
 }

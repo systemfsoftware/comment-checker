@@ -2,7 +2,7 @@
 
 use crate::Verdict;
 use crate::classify::classify;
-use crate::comment::Comment;
+use crate::comment::{Comment, PositionRole};
 use crate::detect::detect_comments;
 use crate::hook::{HookInput, decode};
 use crate::report::{Flagged, format_report};
@@ -67,16 +67,13 @@ fn new_comments(old: &str, new: &str, file_path: &str) -> Vec<Comment> {
     detect_comments(new, file_path)
         .into_iter()
         .filter(|comment| !old_texts.contains(&normalize(comment)))
-        .map(mark_unreliable)
+        .map(mark_fragment_edge_context)
         .collect()
 }
 
-/// Mark a comment's context as unreliable — the fragment edge of an Edit or
-/// `MultiEdit` may have lost adjacent-code context, so the verifier must
-/// fall back from restate detection rather than convict.
-fn mark_unreliable(mut comment: Comment) -> Comment {
+fn mark_fragment_edge_context(mut comment: Comment) -> Comment {
     if let Some(ctx) = comment.context.as_mut() {
-        ctx.unreliable = true;
+        ctx.unreliable = ctx.adjacent_code.is_none() || ctx.position == PositionRole::Trailing;
     }
     comment
 }
