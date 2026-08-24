@@ -6,27 +6,15 @@
 mod common;
 
 use claude_code_comment_checker::{Outcome, check};
-use common::{Case, Label, load_corpus, synthesize_source, synthesized_path};
-
-fn escape(s: &str) -> String {
-    s.replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-}
-
-/// The realistic edit: the file held the case's code, and the agent's edit adds
-/// the comment above, below, or beside it.
-fn edit_payload(case: &Case) -> String {
-    let file_path = synthesized_path(case);
-    let old = escape(&format!("{}\n", case.code));
-    let new = escape(&synthesize_source(case));
-    format!(
-        r#"{{"tool_name":"Edit","tool_input":{{"file_path":"{file_path}","old_string":"{old}","new_string":"{new}"}}}}"#
-    )
-}
+use common::{Case, Label, edit_payload, load_corpus, synthesize_source, synthesized_path};
 
 fn blocks(case: &Case) -> bool {
-    matches!(check(&edit_payload(case), ""), Outcome::Block { .. })
+    let payload = edit_payload(
+        &synthesized_path(case),
+        &format!("{}\n", case.code),
+        &synthesize_source(case),
+    );
+    matches!(check(&payload, ""), Outcome::Block { .. })
 }
 
 #[test]

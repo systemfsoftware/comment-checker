@@ -16,6 +16,28 @@ use claude_code_comment_checker::{
 };
 use serde::Deserialize;
 
+fn escape(field: &str) -> String {
+    field
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+}
+
+pub fn write_payload(file_path: &str, content: &str) -> String {
+    let content = escape(content);
+    format!(
+        r#"{{"tool_name":"Write","tool_input":{{"file_path":"{file_path}","content":"{content}"}}}}"#
+    )
+}
+
+pub fn edit_payload(file_path: &str, old_string: &str, new_string: &str) -> String {
+    let old_string = escape(old_string);
+    let new_string = escape(new_string);
+    format!(
+        r#"{{"tool_name":"Edit","tool_input":{{"file_path":"{file_path}","old_string":"{old_string}","new_string":"{new_string}"}}}}"#
+    )
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Label {
     Unnecessary,

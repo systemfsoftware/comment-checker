@@ -3,15 +3,9 @@
 
 use claude_code_comment_checker::{Outcome, check};
 
-fn write(file_path: &str, content: &str) -> String {
-    let content = content
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n");
-    format!(
-        r#"{{"tool_name":"Write","tool_input":{{"file_path":"{file_path}","content":"{content}"}}}}"#
-    )
-}
+mod common;
+
+use common::write_payload as write;
 
 #[test]
 fn unnecessary_comment_blocks() {
