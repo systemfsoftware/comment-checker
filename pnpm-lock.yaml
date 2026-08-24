@@ -31,13 +31,13 @@ importers:
     devDependencies:
       '@effect/platform-node':
         specifier: 4.0.0-rc.108
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(ioredis@5.11.1)
+        version: 4.0.0-rc.108(effect@4.0.0-rc.111)(ioredis@5.11.1)
       '@types/node':
         specifier: latest
         version: 26.2.0
       effect:
-        specifier: 4.0.0-rc.108
-        version: 4.0.0-rc.108
+        specifier: 4.0.0-rc.111
+        version: 4.0.0-rc.111
       oxlint:
         specifier: latest
         version: 1.79.0
@@ -694,8 +694,8 @@ packages:
       oxc-resolver:
         optional: true
 
-  effect@4.0.0-rc.108:
-    resolution: {integrity: sha512-KmI3DlKZWPvCL4QQ2FMaPOuxMt/7DrKMENCY/gQ+MkDR5QYw25wgU5Zmh/wVLboNjIci1gNOgNCFe4xqgxli3A==}
+  effect@4.0.0-rc.111:
+    resolution: {integrity: sha512-ASd5L58EIR0CUNueZNKKjSsyOCd+2alxOAIaTcHaqkJkPsaYSsw5Cg/cfANk5K4Jr2YsX756xvX11shzqsreWA==}
 
   empathic@2.0.1:
     resolution: {integrity: sha512-YGRs8knHhKHVShLkFET/rWAU8kmHbOV5LwN938RHI0pljAJ1Gf6SzXsSmRaEzcXTtOOmVqJ5+WtQPL5uigY50Q==}
@@ -733,9 +733,6 @@ packages:
   ioredis@5.11.1:
     resolution: {integrity: sha512-ehuGcf94bQXhfagULNXrJdfnWO38v070jxSx/qE87Kjzmu2fU7ro5EFAb+OPituLqgfyuQaym5DlrNydW2sJ9A==}
     engines: {node: '>=12.22.0'}
-
-  kubernetes-types@1.30.0:
-    resolution: {integrity: sha512-Dew1okvhM/SQcIa2rcgujNndZwU8VnSapDgdxlYoB84ZlpAD43U6KLAFqYo17ykSFGHNPrg0qry0bP+GJd9v7Q==}
 
   mime@4.1.0:
     resolution: {integrity: sha512-X5ju04+cAzsojXKes0B/S4tcYtFAJ6tTMuSPBEn9CPGlrWr8Fiw7qYeLT0XyH80HSoAoqWCaz+MWKh22P7G1cw==}
@@ -886,10 +883,6 @@ packages:
     resolution: {integrity: sha512-HvltHd7avK13QIw/oLe4qoOLyoVSoafqJ2jYOrtMRBkbYT31eiBQ8O0ehRKZiEZCMEyLFQNIADpgCWC5fALvYQ==}
     engines: {node: '>=22.19.0'}
 
-  uuid@14.0.1:
-    resolution: {integrity: sha512-6ZxzVpzDXDa3bJWaHilVayA+BH/1zmxCJoVgvmqJnid/gPoKHxUrS/aC/T6LGQtNHT+XHG9fXPJB4d+IrU30Ew==}
-    hasBin: true
-
   verkit@0.3.2:
     resolution: {integrity: sha512-zj/ob3UsvJGN0whEAKFp53REA5X66hvffVqoCtVQAakJKnKlH+/PcOfMoFwIG/o4rElqLv/ycAFlx8ZlXUorCg==}
     engines: {node: '>=18.12.0'}
@@ -917,19 +910,19 @@ packages:
 
 snapshots:
 
-  '@effect/platform-node-shared@4.0.0-rc.109(effect@4.0.0-rc.108)':
+  '@effect/platform-node-shared@4.0.0-rc.109(effect@4.0.0-rc.111)':
     dependencies:
       '@types/ws': 8.18.1
-      effect: 4.0.0-rc.108
+      effect: 4.0.0-rc.111
       ws: 8.21.3
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-node@4.0.0-rc.108(effect@4.0.0-rc.108)(ioredis@5.11.1)':
+  '@effect/platform-node@4.0.0-rc.108(effect@4.0.0-rc.111)(ioredis@5.11.1)':
     dependencies:
-      '@effect/platform-node-shared': 4.0.0-rc.109(effect@4.0.0-rc.108)
-      effect: 4.0.0-rc.108
+      '@effect/platform-node-shared': 4.0.0-rc.109(effect@4.0.0-rc.111)
+      effect: 4.0.0-rc.111
       ioredis: 5.11.1
       mime: 4.1.0
       undici: 8.10.0
@@ -1278,13 +1271,11 @@ snapshots:
 
   dts-resolver@3.0.0: {}
 
-  effect@4.0.0-rc.108:
+  effect@4.0.0-rc.111:
     dependencies:
       '@standard-schema/spec': 1.1.0
       fast-check: 4.9.0
-      kubernetes-types: 1.30.0
       msgpackr: 2.0.5
-      uuid: 14.0.1
 
   empathic@2.0.1: {}
 
@@ -1317,8 +1308,6 @@ snapshots:
       standard-as-callback: 2.1.0
     transitivePeerDependencies:
       - supports-color
-
-  kubernetes-types@1.30.0: {}
 
   mime@4.1.0: {}
 
@@ -1493,8 +1482,6 @@ snapshots:
   undici-types@8.3.0: {}
 
   undici@8.10.0: {}
-
-  uuid@14.0.1: {}
 
   verkit@0.3.2: {}
 
