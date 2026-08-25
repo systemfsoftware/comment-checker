@@ -26,7 +26,8 @@ fn main() -> ExitCode {
             ExitCode::from(0)
         }
         Outcome::Block { report } => {
-            print!("{report}");
+            // Why: exit 2 hands the model stderr and drops the other stream.
+            eprint!("{report}");
             ExitCode::from(2)
         }
     }

@@ -30,7 +30,7 @@ one, make the code self-explanatory instead — better names, extraction,
 a clearer type — and do not re-add the comment.
 ```
 
-Exit status is the contract: `0` on pass, `2` when comments are flagged.
+Exit status is the contract: `0` on pass, `2` when comments are flagged. The report is written to stderr, because that is the stream a host forwards to the model on exit 2.
 
 ## Install
 
@@ -149,8 +149,8 @@ Deterministic, and the reason sessions and scripts can gate on the hook:
 
 | Code | Meaning |
 |---|---|
-| 0 | Pass — no unnecessary comments found; empty input or unparseable payload also passes |
-| 2 | Block — one or more unnecessary comments; report on stdout |
+| 0 | Pass — no unnecessary comments found; empty input or unparseable payload also passes. Skip note on stdout |
+| 2 | Block — one or more unnecessary comments; report on stderr, the stream the host forwards to the model |
 
 ## FAQ
 

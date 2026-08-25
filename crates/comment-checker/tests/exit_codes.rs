@@ -1,4 +1,4 @@
-//! Black-box exit-code contract assert (issue #6).
+//! Black-box exit-code and output-stream contract assert (issue #6).
 //!
 //! The release workflow's smoke step hard-codes `rc -eq 2` for flagged
 //! payloads; that contract previously lived only in YAML, duplicated and
@@ -16,11 +16,17 @@ const CLEAN_PAYLOAD: &str = r##"{"tool_name":"Write","tool_input":{"file_path":"
 
 const FLAGGED_PAYLOAD: &str = r#"{"tool_name":"Write","tool_input":{"file_path":"src/load_config.py","content":"def load_config(path):\n    # TODO: fix this later\n    return json.load(open(path))\n"}}"#;
 
-fn run_binary(payload: &str) -> std::process::ExitStatus {
+struct Run {
+    status: std::process::ExitStatus,
+    stdout: String,
+    stderr: String,
+}
+
+fn run_binary(payload: &str) -> Run {
     let mut child = Command::new(env!("CARGO_BIN_EXE_comment-checker"))
         .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .expect("spawn comment-checker binary");
     // Test harness vs gate split: the binary reads stdin until EOF; the OS
@@ -31,22 +37,45 @@ fn run_binary(payload: &str) -> std::process::ExitStatus {
         .expect("stdin")
         .write_all(payload.as_bytes())
         .expect("write payload");
-    child.wait().expect("wait for binary")
+    let out = child.wait_with_output().expect("wait for binary");
+    Run {
+        status: out.status,
+        stdout: String::from_utf8(out.stdout).expect("stdout is utf-8"),
+        stderr: String::from_utf8(out.stderr).expect("stderr is utf-8"),
+    }
 }
 
 #[test]
 fn clean_payload_exits_zero() {
-    assert!(run_binary(CLEAN_PAYLOAD).success());
+    assert!(run_binary(CLEAN_PAYLOAD).status.success());
 }
 
 #[test]
 fn flagged_payload_exits_with_the_blocked_contract() {
-    let status = run_binary(FLAGGED_PAYLOAD);
+    let run = run_binary(FLAGGED_PAYLOAD);
     assert_eq!(
-        status.code(),
+        run.status.code(),
         Some(i32::from(BLOCKED_EXIT_CODE)),
         "flagged payload must exit {BLOCKED_EXIT_CODE} — this constant is \
          duplicated in .github/workflows/release.yml smoke step; changing it \
          requires updating both"
+    );
+}
+
+#[test]
+fn flagged_payload_reports_on_stderr_only() {
+    let run = run_binary(FLAGGED_PAYLOAD);
+    assert!(
+        run.stderr.contains("flagged"),
+        "the report must go to stderr: on exit 2 the host forwards stderr to \
+         the model and drops stdout, so a report on stdout is invisible to the \
+         agent it addresses. stderr was {:?}",
+        run.stderr
+    );
+    assert!(
+        run.stdout.is_empty(),
+        "a blocked verdict must leave stdout empty, so nothing competes with \
+         the stderr report or is mistaken for hook JSON. stdout was {:?}",
+        run.stdout
     );
 }
