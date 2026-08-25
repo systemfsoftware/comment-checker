@@ -11,10 +11,10 @@ It never edits your files, never sends code anywhere, and exits deterministicall
 pnpm add -g @systemfsoftware/claude-code-comment-checker
 ```
 
-Pipe a `Write` payload to the binary and it reports what it would block:
+Pipe a `Write` payload to the binary and it reports what it would block. The report goes to stderr, so `2>&1` keeps it when you redirect:
 
 ```bash
-$ echo '{"tool_name":"Write","tool_input":{"file_path":"src/load_config.py","content":"import json\n\ndef load_config(path):\n    # Parse the config file\n    data = json.load(open(path))\n    # TODO: fix this later\n    # print(data)\n    return data\n"}}' | comment-checker
+$ echo '{"tool_name":"Write","tool_input":{"file_path":"src/load_config.py","content":"import json\n\ndef load_config(path):\n    # Parse the config file\n    data = json.load(open(path))\n    # TODO: fix this later\n    # print(data)\n    return data\n"}}' | comment-checker 2>&1
 An automated reviewer flagged 3 comment(s) in src/load_config.py as unnecessary.
 
 Each is stated with the specific reason it should be removed. Do not
@@ -30,7 +30,7 @@ one, make the code self-explanatory instead — better names, extraction,
 a clearer type — and do not re-add the comment.
 ```
 
-Exit status is the contract: `0` on pass, `2` when comments are flagged. The report is written to stderr, because that is the stream a host forwards to the model on exit 2.
+Exit status is the contract: `0` on pass, `2` when comments are flagged. The report is written to stderr, because that is the stream the host forwards to the model on exit 2 while stdout is discarded — see the [Claude Code hooks reference](https://code.claude.com/docs/en/hooks#exit-code-2).
 
 ## Install
 

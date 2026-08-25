@@ -30,8 +30,8 @@ Add the hook to `~/.claude/settings.json` (user) or `.claude/settings.json` (pro
 ```
 
 On `Edit` and `MultiEdit` only newly added comments are checked; restatement detection is disabled on edit fragments.
-On a clean write the hook prints `[check-comments] Skipping: No unnecessary comments found` and exits 0.
-When comments are flagged it prints the report with per-comment reasons and exits 2 — the status code is the contract for automation.
+On a clean write the hook writes `[check-comments] Skipping: No unnecessary comments found` to stdout and exits 0.
+When comments are flagged it writes the report, with per-comment reasons, to stderr and exits 2 — stderr because that is the stream a host forwards to the model on exit 2, and the status code is the contract for automation.
 
 ## Docs
 

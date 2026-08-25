@@ -16,6 +16,15 @@ const CLEAN_PAYLOAD: &str = r##"{"tool_name":"Write","tool_input":{"file_path":"
 
 const FLAGGED_PAYLOAD: &str = r#"{"tool_name":"Write","tool_input":{"file_path":"src/load_config.py","content":"def load_config(path):\n    # TODO: fix this later\n    return json.load(open(path))\n"}}"#;
 
+const EDIT_FLAGGED_PAYLOAD: &str = r#"{"tool_name":"Edit","tool_input":{"file_path":"foo.py","old_string":"x = 1\n","new_string":"x = 1  # TODO: handle this\n"}}"#;
+
+const MULTI_EDIT_FLAGGED_PAYLOAD: &str = r#"{"tool_name":"MultiEdit","tool_input":{"file_path":"foo.py","edits":[{"old_string":"x = 1\n","new_string":"x = 1\n# TODO: handle\n"}]}}"#;
+
+const REPORT_HEADER: &str = "An automated reviewer flagged";
+const REPORT_ACTION: &str = "Action: delete the flagged comments.";
+const REPORT_REASON: &str = "a TODO with no tracked reference";
+const PASS_NOTE: &str = "[check-comments] Skipping";
+
 struct Run {
     status: std::process::ExitStatus,
     stdout: String,
@@ -23,14 +32,17 @@ struct Run {
 }
 
 fn run_binary(payload: &str) -> Run {
+    run_binary_with_args(payload, &[])
+}
+
+fn run_binary_with_args(payload: &str, args: &[&str]) -> Run {
     let mut child = Command::new(env!("CARGO_BIN_EXE_comment-checker"))
+        .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn comment-checker binary");
-    // Test harness vs gate split: the binary reads stdin until EOF; the OS
-    // default write buffer is larger than any payload here.
     child
         .stdin
         .take()
@@ -45,9 +57,40 @@ fn run_binary(payload: &str) -> Run {
     }
 }
 
+fn assert_report_on_stderr_only(run: &Run, label: &str) {
+    for anchor in [REPORT_HEADER, REPORT_ACTION, REPORT_REASON] {
+        assert!(
+            run.stderr.contains(anchor),
+            "{label}: exit 2 forwards stderr to the model and drops stdout, so the \
+             whole report must be on stderr; missing {anchor:?}, stderr was {:?}",
+            run.stderr
+        );
+    }
+    assert!(
+        run.stdout.is_empty(),
+        "{label}: a blocked verdict must leave stdout empty; stdout was {:?}",
+        run.stdout
+    );
+}
+
 #[test]
 fn clean_payload_exits_zero() {
     assert!(run_binary(CLEAN_PAYLOAD).status.success());
+}
+
+#[test]
+fn clean_payload_notes_on_stdout_only() {
+    let run = run_binary(CLEAN_PAYLOAD);
+    assert!(
+        run.stdout.contains(PASS_NOTE),
+        "a pass note belongs on stdout, which a host keeps to its debug log; stdout was {:?}",
+        run.stdout
+    );
+    assert!(
+        run.stderr.is_empty(),
+        "a passing verdict must leave stderr empty so nothing reaches the model; stderr was {:?}",
+        run.stderr
+    );
 }
 
 #[test]
@@ -63,11 +106,26 @@ fn flagged_payload_exits_with_the_blocked_contract() {
 }
 
 #[test]
-fn flagged_payload_reports_on_stderr_only() {
-    let run = run_binary(FLAGGED_PAYLOAD);
+fn flagged_write_reports_on_stderr_only() {
+    assert_report_on_stderr_only(&run_binary(FLAGGED_PAYLOAD), "Write");
+}
+
+#[test]
+fn flagged_edit_reports_on_stderr_only() {
+    assert_report_on_stderr_only(&run_binary(EDIT_FLAGGED_PAYLOAD), "Edit");
+}
+
+#[test]
+fn flagged_multi_edit_reports_on_stderr_only() {
+    assert_report_on_stderr_only(&run_binary(MULTI_EDIT_FLAGGED_PAYLOAD), "MultiEdit");
+}
+
+#[test]
+fn custom_prompt_report_lands_on_stderr() {
+    let run = run_binary_with_args(FLAGGED_PAYLOAD, &["--prompt", "Review:\n\n{{comments}}"]);
     assert!(
-        run.stderr.contains("# TODO: fix this later"),
-        "exit 2 forwards stderr to the model and drops stdout; stderr was {:?}",
+        run.stderr.contains("Review:") && run.stderr.contains(REPORT_HEADER),
+        "a --prompt report must reach the model on stderr too; stderr was {:?}",
         run.stderr
     );
     assert!(
