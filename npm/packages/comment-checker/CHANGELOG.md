@@ -27,3 +27,7 @@
 ## 0.1.7
 
   - Fix GitHub releases to include platform binaries for every supported operating system and architecture.
+
+## 0.1.8
+
+  - The `--version` flag now reports the same version as the installed package. Previously it always reported `0.1.0` regardless of which release was installed.
