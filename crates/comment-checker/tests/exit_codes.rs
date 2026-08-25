@@ -66,16 +66,13 @@ fn flagged_payload_exits_with_the_blocked_contract() {
 fn flagged_payload_reports_on_stderr_only() {
     let run = run_binary(FLAGGED_PAYLOAD);
     assert!(
-        run.stderr.contains("flagged"),
-        "the report must go to stderr: on exit 2 the host forwards stderr to \
-         the model and drops stdout, so a report on stdout is invisible to the \
-         agent it addresses. stderr was {:?}",
+        run.stderr.contains("# TODO: fix this later"),
+        "exit 2 forwards stderr to the model and drops stdout; stderr was {:?}",
         run.stderr
     );
     assert!(
         run.stdout.is_empty(),
-        "a blocked verdict must leave stdout empty, so nothing competes with \
-         the stderr report or is mistaken for hook JSON. stdout was {:?}",
+        "a blocked verdict must leave stdout empty; stdout was {:?}",
         run.stdout
     );
 }

@@ -22,13 +22,20 @@ fn main() -> ExitCode {
 
     match check(&input, cli.prompt.as_deref().unwrap_or_default()) {
         Outcome::Pass { note } => {
-            print!("{note}");
+            emit_to_debug_log(&note);
             ExitCode::from(0)
         }
         Outcome::Block { report } => {
-            // Why: exit 2 hands the model stderr and drops the other stream.
-            eprint!("{report}");
+            emit_to_model(&report);
             ExitCode::from(2)
         }
     }
+}
+
+fn emit_to_model(report: &str) {
+    eprint!("{report}");
+}
+
+fn emit_to_debug_log(note: &str) {
+    print!("{note}");
 }
