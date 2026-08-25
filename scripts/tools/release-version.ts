@@ -2,7 +2,35 @@
 
 const MANIFEST = 'npm/packages/comment-checker/package.json'
 const CHANGELOG = 'npm/packages/comment-checker/CHANGELOG.md'
+const WORKSPACE_CARGO = 'Cargo.toml'
 const RANK: Record<string, number> = { patch: 1, minor: 2, major: 3 }
+
+async function bumpCargoToml(path: string, next: string): Promise<void> {
+  const original = await Deno.readTextFile(path)
+  const lines = original.split('\n')
+  let inTarget = false
+  let targetHeader: string
+  if (path === WORKSPACE_CARGO) {
+    targetHeader = '[workspace.package]'
+  } else {
+    targetHeader = '[package]'
+  }
+  let bumped = false
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim()
+    if (trimmed.startsWith('[')) {
+      inTarget = trimmed === targetHeader
+    } else if (inTarget && trimmed.startsWith('version')) {
+      lines[i] = lines[i].replace(/version\s*=\s*"[^"]*"/, `version = "${next}"`)
+      bumped = true
+      break
+    }
+  }
+  if (!bumped) {
+    throw new Error(`bumpCargoToml: no version found under ${targetHeader} in ${path}`)
+  }
+  await Deno.writeTextFile(path, lines.join('\n'))
+}
 
 type Intent = { path: string; bump: string; summary: string }
 
@@ -53,6 +81,19 @@ await Deno.writeTextFile(
   MANIFEST,
   `${JSON.stringify(manifest, null, 2).trimEnd()}\n`,
 )
+
+// Keep Rust crate versions locked to the npm version so --version matches the GitHub tag.
+await bumpCargoToml(WORKSPACE_CARGO, next)
+for await (const entry of Deno.readDir('crates')) {
+  if (!entry.isDirectory) continue
+  const crateManifest = `crates/${entry.name}/Cargo.toml`
+  try {
+    await bumpCargoToml(crateManifest, next)
+  } catch (e) {
+    if (e instanceof Deno.errors.NotFound) continue
+    throw e
+  }
+}
 
 let changelog = '# Changelog\n'
 try {

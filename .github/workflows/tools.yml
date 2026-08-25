@@ -40,4 +40,5 @@ jobs:
             echo "sync-root-version produced no unified patch on ${{ matrix.os }}" >&2
             exit 1
           }
+          ./scripts/tools/check-versions.ts
           ./scripts/tools/check-matrix.ts
