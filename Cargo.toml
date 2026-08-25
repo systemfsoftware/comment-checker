@@ -4,7 +4,7 @@ resolver = "2"
 default-members = ["crates/comment-checker"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.7"
 edition = "2024"
 rust-version = "1.85"
 license = "Apache-2.0"
