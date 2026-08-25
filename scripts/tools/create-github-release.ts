@@ -15,13 +15,15 @@ async function exec(cmd: string, args: string[]): Promise<string> {
   return new TextDecoder().decode(out.stdout)
 }
 
-async function firstExisting(paths: string[]): Promise<string | null> {
-  for (const p of paths) {
-    try {
-      if ((await Deno.stat(p)).isFile) return p
-    } catch { /* next */ }
-  }
-  return null
+async function walk(dir: string, out: string[] = []): Promise<string[]> {
+  try {
+    for await (const e of Deno.readDir(dir)) {
+      const p = `${dir}/${e.name}`
+      if (e.isDirectory) await walk(p, out)
+      else if (e.isFile) out.push(p)
+    }
+  } catch { /* dir missing */ }
+  return out
 }
 
 const launcherManifest = JSON.parse(await Deno.readTextFile(MANIFEST))
@@ -36,19 +38,31 @@ try {
   if (body) releaseNotes = body
 } catch { /* no changelog */ }
 
-const tarballs = (await Promise.all(targets.map((t) =>
-  firstExisting([
-    `release-assets/release-${t.suffix}/dist/release-tarball-${t.suffix}/comment-checker-${t.target}.tar.gz`,
-    `release-assets/release-${t.suffix}/comment-checker-${t.target}.tar.gz`,
-    `release-assets/comment-checker-${t.target}.tar.gz`,
-  ]).then((found) => {
-    if (!found) console.error(`create-github-release: missing tarball for ${t.target}`)
-    return found ? ({ target: t, tarball: found } as const) : null
-  })
-))).filter((v): v is { target: Target; tarball: string } => v !== null)
+const tarballs: { target: Target; tarball: string }[] = []
+const missing: string[] = []
+for (const t of targets) {
+  const p = `release-assets/release-${t.suffix}/comment-checker-${t.target}.tar.gz`
+  try {
+    if ((await Deno.stat(p)).isFile) tarballs.push({ target: t, tarball: p })
+    else {
+      console.error(`create-github-release: missing tarball for ${t.target} at ${p}`)
+      missing.push(p)
+    }
+  } catch {
+    console.error(`create-github-release: missing tarball for ${t.target} at ${p}`)
+    missing.push(p)
+  }
+}
 
-if (tarballs.length !== targets.length) {
+if (missing.length > 0) {
   console.error(`create-github-release: expected ${targets.length} tarballs, found ${tarballs.length}`)
+  const tree = await walk('release-assets')
+  if (tree.length > 0) {
+    console.error('release-assets tree:')
+    for (const f of tree.sort()) console.error(`  ${f}`)
+  } else {
+    console.error('release-assets is empty or missing')
+  }
   Deno.exit(1)
 }
 
