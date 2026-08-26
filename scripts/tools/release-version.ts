@@ -130,6 +130,7 @@ const version = extractJsonVersion(manifestText, MANIFEST)
 const next = nextVersion(version, bump)
 
 await Deno.writeTextFile(MANIFEST, replaceJsonVersion(manifestText, next, MANIFEST))
+await bumpCargoToml(WORKSPACE_CARGO, next)
 for await (const entry of Deno.readDir('crates')) {
   if (!entry.isDirectory) continue
   const path = `crates/${entry.name}/Cargo.toml`
