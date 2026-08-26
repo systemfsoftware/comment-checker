@@ -1,116 +1,85 @@
-#!/usr/bin/env -S deno run --allow-read
+#!/usr/bin/env -S deno run --allow-read --allow-env
 
-import { type } from 'arktype'
+import { runMain } from '@effect/platform-deno/DenoRuntime'
+import { layer as DenoPlatform } from '@effect/platform-deno/DenoServices'
+import { Console, Effect, FileSystem } from 'effect'
 
-const Semver = type('string')
-const isNotFound = (e: unknown): boolean =>
-  e !== null && typeof e === 'object' && 'name' in e && Reflect.get(e, 'name') === 'NotFound'
+import {
+  CRATES_DIR,
+  extractJsonVersion,
+  extractNixVersion,
+  extractTomlVersion,
+  FLAKE_NIX,
+  MANIFEST,
+  PLUGIN_MANIFEST,
+  ROOT_MANIFEST,
+  VersionMismatch,
+  WORKSPACE_CARGO,
+} from '../lib/version-sync.ts'
 
-function extractVersion(content: string, header: string): string | null {
-  const lines = content.split("\n");
-  let inTarget = false;
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith("[")) {
-      inTarget = trimmed === header;
-    } else if (inTarget && trimmed.startsWith("version")) {
-      const m = /version\s*=\s*"([^"]+)"/.exec(trimmed);
-      if (m) return Semver.assert(m[1]);
+const program = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem
+  const npmText = yield* fs.readFileString(MANIFEST)
+  const npmVersion = yield* extractJsonVersion(npmText, MANIFEST)
+
+  const workspaceText = yield* fs.readFileString(WORKSPACE_CARGO)
+  const workspaceVersion = yield* extractTomlVersion(
+    workspaceText,
+    '[workspace.package]',
+    WORKSPACE_CARGO,
+  )
+
+  const mismatches: Array<string> = []
+  if (workspaceVersion !== npmVersion) {
+    mismatches.push(`Cargo.toml workspace ${workspaceVersion} != npm ${npmVersion}`)
+  }
+
+  const crateNames = yield* fs.readDirectory(CRATES_DIR)
+  for (const name of crateNames) {
+    const path = `${CRATES_DIR}/${name}/Cargo.toml`
+    if (!(yield* fs.exists(path))) continue
+    const text = yield* fs.readFileString(path)
+    const crateVersion = yield* extractTomlVersion(text, '[package]', path)
+    if (crateVersion !== npmVersion) {
+      mismatches.push(`${path} ${crateVersion} != npm ${npmVersion}`)
     }
   }
-  return null;
-}
 
-function extractNixVersion(content: string): string | null {
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith('version = "')) {
-      const m = /version\s*=\s*"([^"]+)"/.exec(trimmed);
-      if (m) return Semver.assert(m[1]);
+  if (yield* fs.exists(FLAKE_NIX)) {
+    const nixText = yield* fs.readFileString(FLAKE_NIX)
+    const nixVersion = yield* extractNixVersion(nixText, FLAKE_NIX)
+    if (nixVersion !== npmVersion) {
+      mismatches.push(`flake.nix ${nixVersion} != npm ${npmVersion}`)
     }
   }
-  return null;
-}
 
-function extractJsonVersion(text: string, path: string): string {
-  const m = /"version"\s*:\s*"([^"]+)"/.exec(text)
-  if (!m) throw new Error(`no version field in ${path}`)
-  return Semver.assert(m[1])
-}
-
-const npmText = await Deno.readTextFile("npm/packages/comment-checker/package.json")
-const npmVersion = extractJsonVersion(npmText, "npm/packages/comment-checker/package.json")
-
-const workspaceContent = await Deno.readTextFile("Cargo.toml");
-const workspaceVersion = extractVersion(workspaceContent, "[workspace.package]");
-if (!workspaceVersion) {
-  console.error("check-versions: no version found under [workspace.package] in Cargo.toml");
-  Deno.exit(1);
-}
-
-const mismatches: string[] = [];
-if (workspaceVersion !== npmVersion) {
-  mismatches.push(`Cargo.toml workspace ${workspaceVersion} != npm ${npmVersion}`);
-}
-
-for await (const entry of Deno.readDir("crates")) {
-  if (!entry.isDirectory) continue;
-  const path = `crates/${entry.name}/Cargo.toml`;
-  try {
-    const content = await Deno.readTextFile(path);
-    const crateVersion = extractVersion(content, "[package]");
-    if (crateVersion && crateVersion !== npmVersion) {
-      mismatches.push(`${path} ${crateVersion} != npm ${npmVersion}`);
+  if (yield* fs.exists(ROOT_MANIFEST)) {
+    const rootText = yield* fs.readFileString(ROOT_MANIFEST)
+    const rootVersion = yield* extractJsonVersion(rootText, ROOT_MANIFEST)
+    if (rootVersion !== npmVersion) {
+      mismatches.push(`package.json root ${rootVersion} != npm ${npmVersion}`)
     }
-  } catch (e) {
-    if (isNotFound(e)) continue;
-    throw e;
   }
-}
 
-try {
-  const nixContent = await Deno.readTextFile("flake.nix");
-  const nixVersion = extractNixVersion(nixContent);
-  if (nixVersion && nixVersion !== npmVersion) {
-    mismatches.push(`flake.nix ${nixVersion} != npm ${npmVersion}`);
-  }
-} catch (e) {
-  if (!isNotFound(e)) throw e;
-}
-try {
-  const rootText = await Deno.readTextFile("package.json")
-  const rootVersion = extractJsonVersion(rootText, "package.json")
-  if (rootVersion !== npmVersion) {
-    mismatches.push(`package.json root ${rootVersion} != npm ${npmVersion}`);
-  }
-} catch (e) {
-  if (!isNotFound(e)) throw e;
-}
-
-let pluginChecked = 0;
-for (const p of [".claude-plugin/plugin.json"]) {
-  try {
-    const content = await Deno.readTextFile(p);
-    const pluginVersion = extractJsonVersion(content, p)
+  let pluginChecked = false
+  if (yield* fs.exists(PLUGIN_MANIFEST)) {
+    const pluginText = yield* fs.readFileString(PLUGIN_MANIFEST)
+    const pluginVersion = yield* extractJsonVersion(pluginText, PLUGIN_MANIFEST)
     if (pluginVersion !== npmVersion) {
-      mismatches.push(`${p} ${pluginVersion} != npm ${npmVersion}`);
+      mismatches.push(`${PLUGIN_MANIFEST} ${pluginVersion} != npm ${npmVersion}`)
     }
-    pluginChecked++;
-  } catch (e) {
-    if (isNotFound(e)) continue;
-    const isSyntax = e !== null && typeof e === 'object' && 'name' in e && Reflect.get(e, 'name') === 'SyntaxError'
-    if (isSyntax) continue;
-    throw e;
+    pluginChecked = true
   }
-}
 
-if (mismatches.length > 0) {
-  for (const m of mismatches) console.error(`check-versions: ${m}`);
-  Deno.exit(1);
-}
+  if (mismatches.length > 0) {
+    return yield* new VersionMismatch({ mismatches })
+  }
 
-if (pluginChecked === 0) {
-  console.log(`check-versions: ok npm=${npmVersion} workspace=${workspaceVersion} (plugin manifest: none tracked)`);
-} else {
-  console.log(`check-versions: ok npm=${npmVersion} workspace=${workspaceVersion}`);
-}
+  yield* Console.log(
+    pluginChecked
+      ? `check-versions: ok npm=${npmVersion} workspace=${workspaceVersion}`
+      : `check-versions: ok npm=${npmVersion} workspace=${workspaceVersion} (plugin manifest: none tracked)`,
+  )
+})
+
+runMain(program.pipe(Effect.provide(DenoPlatform)))
