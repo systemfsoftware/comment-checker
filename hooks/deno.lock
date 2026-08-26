@@ -1,7 +1,6 @@
 {
   "version": "5",
   "specifiers": {
-    "jsr:@std/bytes@1.0.6": "1.0.6",
     "jsr:@std/fs@1.0.19": "1.0.19",
     "jsr:@std/internal@^1.0.14": "1.0.14",
     "jsr:@std/io@0.225.2": "0.225.2",
@@ -9,9 +8,6 @@
     "npm:arktype@2.2.3": "2.2.3"
   },
   "jsr": {
-    "@std/bytes@1.0.6": {
-      "integrity": "f6ac6adbd8ccd99314045f5703e23af0a68d7f7e58364b47d2c7f408aeb5820a"
-    },
     "@std/fs@1.0.19": {
       "integrity": "051968c2b1eae4d2ea9f79a08a3845740ef6af10356aff43d3e2ef11ed09fb06"
     },
@@ -55,7 +51,6 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@std/bytes@1.0.6",
       "jsr:@std/fs@1.0.19",
       "jsr:@std/io@0.225.2",
       "jsr:@std/path@1.1.6",
