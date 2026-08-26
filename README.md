@@ -67,6 +67,12 @@ Add the hook to user (`~/.claude/settings.json`) or project (`.claude/settings.j
 }
 ```
 
+Or install this repo as a Claude Code plugin. The hook finds `comment-checker` on PATH or via `direnv exec`, names `flake.nix` when that is why it is missing, and runs a native binary under `bwrap` when bubblewrap is installed. It passes `--strip`. Deno must be on PATH.
+
+```bash
+claude --plugin-dir .
+```
+
 On `Edit` and `MultiEdit`, only the comments *added* by the edit are checked — pre-existing comments are left alone. Edits also arrive as fragments, so restatement detection is disabled on them to avoid false positives.
 
 ### Verify the wiring
