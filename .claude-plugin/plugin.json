@@ -1,0 +1,13 @@
+{
+  "name": "comment-checker",
+  "version": "0.2.0",
+  "description": "PostToolUse hook that flags unnecessary comments. Runs comment-checker --strip, then direnv exec if it is missing. Names flake.nix when that is why it is missing.",
+  "author": {
+    "name": "systemfsoftware",
+    "url": "https://github.com/systemfsoftware/comment-checker"
+  },
+  "homepage": "https://github.com/systemfsoftware/comment-checker",
+  "repository": "https://github.com/systemfsoftware/comment-checker",
+  "license": "Apache-2.0",
+  "keywords": ["hooks", "comments", "claude-code"]
+}
