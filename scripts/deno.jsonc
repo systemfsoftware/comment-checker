@@ -1,10 +1,13 @@
 {
   "imports": {
+    "@effect/platform-deno": "npm:@effect/platform-deno@4.0.0-rc.108",
     "@libs/diff": "jsr:@libs/diff@4.0.0",
     "@std/cli": "jsr:@std/cli@1.0.15",
     "@std/path": "jsr:@std/path@1.1.6",
+    "@std/toml": "jsr:@std/toml@1.0.11",
     "@std/yaml": "jsr:@std/yaml@1.0.4",
-    "arktype": "npm:arktype@2.2.3"
+    "arktype": "npm:arktype@2.2.3",
+    "effect": "npm:effect@4.0.0-rc.108"
   },
   "tasks": {
     "manifest:generate": "./tools/generate-platform-manifest.ts",
