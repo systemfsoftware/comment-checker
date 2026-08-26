@@ -1,4 +1,5 @@
 import { parse as parseToml, stringify as stringifyToml } from '@std/toml'
+import { parse as parseYaml } from '@std/yaml'
 import { Effect, Schema } from 'effect'
 
 export const Semver = Schema.String.check(Schema.isPattern(/^\d+\.\d+\.\d+$/))
@@ -6,7 +7,9 @@ export type Semver = typeof Semver.Type
 
 export const Bump = Schema.Literals(['major', 'minor', 'patch', 'none'])
 export type Bump = typeof Bump.Type
-export type ReleaseBump = Exclude<Bump, 'none'>
+
+export const ReleaseBump = Schema.Literals(['major', 'minor', 'patch'])
+export type ReleaseBump = typeof ReleaseBump.Type
 
 export const TomlHeader = Schema.Literals(['[workspace.package]', '[package]'])
 export type TomlHeader = typeof TomlHeader.Type
@@ -32,10 +35,16 @@ export class AmbiguousNixVersion
 }
 
 export class VersionMismatch extends Schema.TaggedError<VersionMismatch>()('VersionMismatch', {
-  mismatches: Schema.Array(Schema.String),
+  expected: Semver,
+  diffs: Schema.Array(Schema.Struct({
+    path: Schema.String,
+    found: Semver,
+  })),
 }) {
   override get message(): string {
-    return this.mismatches.map((m) => `check-versions: ${m}`).join('\n')
+    return this.diffs
+      .map((d) => `check-versions: ${d.path} ${d.found} != npm ${this.expected}`)
+      .join('\n')
   }
 }
 
@@ -48,34 +57,40 @@ export class TomlParseFailed extends Schema.TaggedError<TomlParseFailed>()('Toml
   }
 }
 
-const PackageTable = Schema.Struct({ version: Semver })
-const TomlTable = Schema.Record(Schema.String, Schema.Unknown)
-
-const TABLE_KEYS: { readonly [H in TomlHeader]: ReadonlyArray<string> } = {
-  '[workspace.package]': ['workspace', 'package'],
-  '[package]': ['package'],
+export class YamlParseFailed extends Schema.TaggedError<YamlParseFailed>()('YamlParseFailed', {
+  path: Schema.String,
+  detail: Schema.String,
+}) {
+  override get message(): string {
+    return `YAML parse failed for ${this.path}: ${this.detail}`
+  }
 }
 
-const decodeToml = (text: string, path: string) =>
-  Effect.try({
-    try: () => parseToml(text),
-    catch: (cause) => new TomlParseFailed({ path, detail: String(cause) }),
-  })
+export class ChangesetParseFailed
+  extends Schema.TaggedError<ChangesetParseFailed>()('ChangesetParseFailed', {
+    path: Schema.String,
+  }) {
+  override get message(): string {
+    return `changeset is not YAML frontmatter: ${this.path}`
+  }
+}
 
-const locateVersionTable = (root: unknown, header: TomlHeader, path: string) =>
-  Effect.gen(function* () {
-    let cur: unknown = root
-    for (const key of TABLE_KEYS[header]) {
-      if (!Schema.is(TomlTable)(cur) || !(key in cur)) {
-        return yield* new MissingVersion({ path, header })
-      }
-      cur = cur[key]
-    }
-    const table = yield* Schema.decodeUnknownEffect(PackageTable)(cur).pipe(
-      Effect.mapError(() => new MissingVersion({ path, header })),
-    )
-    return { holder: cur, version: table.version }
-  })
+const Versioned = Schema.Struct({ version: Semver })
+const WorkspaceToml = Schema.Struct({
+  workspace: Schema.Struct({
+    package: Versioned,
+  }),
+})
+const PackageToml = Schema.Struct({
+  package: Versioned,
+})
+const JsonDocument = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown), {
+  space: 2,
+})
+const ChangesetFrontmatter = Schema.Record(Schema.String, Bump)
+const nixVersionBindings = (
+  text: string,
+) => [...text.matchAll(/^\s*version\s*=\s*"(\d+\.\d+\.\d+)"\s*;?\s*$/gm)]
 
 export const MANIFEST = 'npm/packages/comment-checker/package.json'
 export const CHANGELOG = 'npm/packages/comment-checker/CHANGELOG.md'
@@ -86,74 +101,78 @@ export const PLUGIN_MANIFEST = '.claude-plugin/plugin.json'
 export const CRATES_DIR = 'crates'
 export const CHANGESET_DIR = './.changeset'
 
-const JSON_VERSION = /"version"\s*:\s*"([^"]+)"/
-const JSON_VERSION_ANY = /"version"\s*:\s*"[^"]*"/
-const NIX_VERSION = /version\s*=\s*"([^"]+)"/
-const NIX_VERSION_ANY = /version\s*=\s*"[^"]*"/
+export const RANK: { readonly [K in ReleaseBump]: number } = { patch: 1, minor: 2, major: 3 }
 
-export const decodeSemver = (raw: string) => Schema.decodeUnknownEffect(Semver)(raw)
+const decodeToml = (text: string, path: string) =>
+  Effect.try({
+    try: () => parseToml(text),
+    catch: (cause) => new TomlParseFailed({ path, detail: String(cause) }),
+  })
 
 export const extractJsonVersion = (text: string, path: string) =>
   Effect.gen(function* () {
-    const m = JSON_VERSION.exec(text)
-    if (!m) return yield* new MissingVersion({ path })
-    return yield* decodeSemver(m[1])
+    const doc = yield* Schema.decodeUnknownEffect(JsonDocument)(text).pipe(
+      Effect.mapError(() => new MissingVersion({ path })),
+    )
+    const row = yield* Schema.decodeUnknownEffect(Versioned)(doc).pipe(
+      Effect.mapError(() => new MissingVersion({ path })),
+    )
+    return row.version
   })
 
 export const replaceJsonVersion = (text: string, next: Semver, path: string) =>
   Effect.gen(function* () {
-    if (!JSON_VERSION_ANY.test(text)) return yield* new MissingVersion({ path })
-    return text.replace(JSON_VERSION_ANY, `"version": "${next}"`)
+    const doc = yield* Schema.decodeUnknownEffect(JsonDocument)(text).pipe(
+      Effect.mapError(() => new MissingVersion({ path })),
+    )
+    yield* Schema.decodeUnknownEffect(Versioned)(doc).pipe(
+      Effect.mapError(() => new MissingVersion({ path })),
+    )
+    const encoded = yield* Schema.encodeUnknownEffect(JsonDocument)({ ...doc, version: next })
+    return encoded.endsWith('\n') ? encoded : `${encoded}\n`
   })
 
 export const extractTomlVersion = (text: string, header: TomlHeader, path: string) =>
   Effect.gen(function* () {
     const parsed = yield* decodeToml(text, path)
-    const located = yield* locateVersionTable(parsed, header, path)
-    return located.version
+    if (header === '[workspace.package]') {
+      if (!Schema.is(WorkspaceToml)(parsed)) return yield* new MissingVersion({ path, header })
+      return parsed.workspace.package.version
+    }
+    if (!Schema.is(PackageToml)(parsed)) return yield* new MissingVersion({ path, header })
+    return parsed.package.version
   })
 
 export const replaceTomlVersion = (text: string, header: TomlHeader, next: Semver, path: string) =>
   Effect.gen(function* () {
     const parsed = yield* decodeToml(text, path)
-    const located = yield* locateVersionTable(parsed, header, path)
-    if (!Schema.is(TomlTable)(located.holder)) {
-      return yield* new MissingVersion({ path, header })
+    if (header === '[workspace.package]') {
+      if (!Schema.is(WorkspaceToml)(parsed)) return yield* new MissingVersion({ path, header })
+      Object.assign(parsed.workspace.package, { version: next })
+      return stringifyToml(parsed)
     }
-    Object.assign(located.holder, { version: next })
+    if (!Schema.is(PackageToml)(parsed)) return yield* new MissingVersion({ path, header })
+    Object.assign(parsed.package, { version: next })
     return stringifyToml(parsed)
   })
-
 export const extractNixVersion = (text: string, path: string) =>
   Effect.gen(function* () {
-    let found: string | undefined
-    for (const line of text.split('\n')) {
-      const trimmed = line.trim()
-      if (trimmed.startsWith('version = "')) {
-        const m = NIX_VERSION.exec(trimmed)
-        if (!m) continue
-        if (found !== undefined) return yield* new AmbiguousNixVersion({ path })
-        found = m[1]
-      }
-    }
-    if (found === undefined) return yield* new MissingVersion({ path })
-    return yield* decodeSemver(found)
+    const hits = nixVersionBindings(text)
+    if (hits.length === 0) return yield* new MissingVersion({ path })
+    if (hits.length > 1) return yield* new AmbiguousNixVersion({ path })
+    return yield* Schema.decodeUnknownEffect(Semver)(hits[0][1])
   })
 
 export const replaceNixVersion = (text: string, next: Semver, path: string) =>
   Effect.gen(function* () {
-    const lines = text.split('\n')
-    let bumped = false
-    for (let i = 0; i < lines.length; i++) {
-      const trimmed = lines[i].trim()
-      if (trimmed.startsWith('version = "')) {
-        if (bumped) return yield* new AmbiguousNixVersion({ path })
-        lines[i] = lines[i].replace(NIX_VERSION_ANY, `version = "${next}"`)
-        bumped = true
-      }
-    }
-    if (!bumped) return yield* new MissingVersion({ path })
-    return lines.join('\n')
+    const current = yield* extractNixVersion(text, path)
+    const hits = nixVersionBindings(text)
+    const hit = hits[0]
+    const index = hit.index
+    if (index === undefined) return yield* new MissingVersion({ path })
+    return `${text.slice(0, index)}${hit[0].replace(current, next)}${
+      text.slice(index + hit[0].length)
+    }`
   })
 
 export const nextVersion = (version: Semver, bump: ReleaseBump) => {
@@ -163,5 +182,25 @@ export const nextVersion = (version: Semver, bump: ReleaseBump) => {
     : bump === 'minor'
     ? `${major}.${minor + 1}.0`
     : `${major}.${minor}.${patch + 1}`
-  return decodeSemver(raw)
+  return Schema.decodeUnknownEffect(Semver)(raw)
 }
+
+export const parseChangeset = (body: string, path: string) =>
+  Effect.gen(function* () {
+    const parts = body.split(/^---$/m)
+    if (parts.length < 3) return yield* new ChangesetParseFailed({ path })
+    const raw = yield* Effect.try({
+      try: () => parseYaml(parts[1] ?? ''),
+      catch: (cause) => new YamlParseFailed({ path, detail: String(cause) }),
+    })
+    const frontmatter = yield* Schema.decodeUnknownEffect(ChangesetFrontmatter)(raw).pipe(
+      Effect.mapError(() => new ChangesetParseFailed({ path })),
+    )
+    const bumps = Object.values(frontmatter)
+    if (bumps.length === 0) return yield* new ChangesetParseFailed({ path })
+    const releaseBumps = bumps.filter((b): b is ReleaseBump => b !== 'none')
+    const summary = (parts[2] ?? '').trim().split('\n').join(' ')
+    if (releaseBumps.length === 0) return { path, bump: 'none' as const, summary }
+    const bump = releaseBumps.reduce((acc, b) => RANK[b] >= RANK[acc] ? b : acc)
+    return { path, bump, summary }
+  })

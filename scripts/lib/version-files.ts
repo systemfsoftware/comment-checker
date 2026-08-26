@@ -12,65 +12,99 @@ import {
   replaceTomlVersion,
   ROOT_MANIFEST,
   type Semver,
-  type TomlHeader,
+  VersionMismatch,
   WORKSPACE_CARGO,
 } from './version-sync.ts'
 
-const rewrite = (
+const rewriteJson = (path: string, next: Semver) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const original = yield* fs.readFileString(path)
+    const rewritten = yield* replaceJsonVersion(original, next, path)
+    yield* fs.writeFileString(path, rewritten)
+  })
+
+const rewriteToml = (
   path: string,
-  next: (text: string) => Effect.Effect<string, unknown, never>,
+  header: '[workspace.package]' | '[package]',
+  next: Semver,
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const original = yield* fs.readFileString(path)
-    const rewritten = yield* next(original)
+    const rewritten = yield* replaceTomlVersion(original, header, next, path)
     yield* fs.writeFileString(path, rewritten)
   })
 
-export const bumpTomlFile = (path: string, header: TomlHeader, next: Semver) =>
-  rewrite(path, (text) => replaceTomlVersion(text, header, next, path))
-
-export const bumpNixFile = (path: string, next: Semver) =>
-  rewrite(path, (text) => replaceNixVersion(text, next, path))
-
-export const bumpJsonFile = (path: string, next: Semver) =>
-  rewrite(path, (text) => replaceJsonVersion(text, next, path))
-
-export const bumpCrateTomls = (next: Semver) =>
+const rewriteNix = (path: string, next: Semver) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
-    const names = yield* fs.readDirectory(CRATES_DIR)
-    for (const name of names) {
-      const path = `${CRATES_DIR}/${name}/Cargo.toml`
-      if (yield* fs.exists(path)) {
-        yield* bumpTomlFile(path, '[package]', next)
-      }
-    }
-  })
-
-export const bumpPluginIfPresent = (next: Semver) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem
-    if (!(yield* fs.exists(PLUGIN_MANIFEST))) return false
-    yield* bumpJsonFile(PLUGIN_MANIFEST, next)
-    return true
+    const original = yield* fs.readFileString(path)
+    const rewritten = yield* replaceNixVersion(original, next, path)
+    yield* fs.writeFileString(path, rewritten)
   })
 
 export const bumpAllSurfaces = (next: Semver) =>
   Effect.gen(function* () {
-    yield* bumpJsonFile(MANIFEST, next)
-    yield* bumpTomlFile(WORKSPACE_CARGO, '[workspace.package]', next)
-    yield* bumpCrateTomls(next)
-    yield* bumpNixFile(FLAKE_NIX, next)
-    yield* bumpJsonFile(ROOT_MANIFEST, next)
-    return yield* bumpPluginIfPresent(next)
+    const fs = yield* FileSystem.FileSystem
+    yield* rewriteJson(MANIFEST, next)
+    yield* rewriteToml(WORKSPACE_CARGO, '[workspace.package]', next)
+    const names = yield* fs.readDirectory(CRATES_DIR)
+    for (const name of names) {
+      const path = `${CRATES_DIR}/${name}/Cargo.toml`
+      if (yield* fs.exists(path)) yield* rewriteToml(path, '[package]', next)
+    }
+    yield* rewriteNix(FLAKE_NIX, next)
+    yield* rewriteJson(ROOT_MANIFEST, next)
+    if (!(yield* fs.exists(PLUGIN_MANIFEST))) return false
+    yield* rewriteJson(PLUGIN_MANIFEST, next)
+    return true
   })
 
-export const readSurfaceVersion = (path: string, kind: 'json' | 'nix' | TomlHeader) =>
+export const checkAllSurfaces = () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
-    const text = yield* fs.readFileString(path)
-    if (kind === 'json') return yield* extractJsonVersion(text, path)
-    if (kind === 'nix') return yield* extractNixVersion(text, path)
-    return yield* extractTomlVersion(text, kind, path)
+    const npmText = yield* fs.readFileString(MANIFEST)
+    const expected = yield* extractJsonVersion(npmText, MANIFEST)
+    const diffs: Array<{ path: string; found: Semver }> = []
+
+    const check = (path: string, found: Semver) => {
+      if (found !== expected) diffs.push({ path, found })
+    }
+
+    const workspaceText = yield* fs.readFileString(WORKSPACE_CARGO)
+    const workspaceVersion = yield* extractTomlVersion(
+      workspaceText,
+      '[workspace.package]',
+      WORKSPACE_CARGO,
+    )
+    check(WORKSPACE_CARGO, workspaceVersion)
+
+    const names = yield* fs.readDirectory(CRATES_DIR)
+    for (const name of names) {
+      const path = `${CRATES_DIR}/${name}/Cargo.toml`
+      if (!(yield* fs.exists(path))) continue
+      const text = yield* fs.readFileString(path)
+      check(path, yield* extractTomlVersion(text, '[package]', path))
+    }
+
+    if (yield* fs.exists(FLAKE_NIX)) {
+      const text = yield* fs.readFileString(FLAKE_NIX)
+      check(FLAKE_NIX, yield* extractNixVersion(text, FLAKE_NIX))
+    }
+
+    if (yield* fs.exists(ROOT_MANIFEST)) {
+      const text = yield* fs.readFileString(ROOT_MANIFEST)
+      check(ROOT_MANIFEST, yield* extractJsonVersion(text, ROOT_MANIFEST))
+    }
+
+    let pluginChecked = false
+    if (yield* fs.exists(PLUGIN_MANIFEST)) {
+      const text = yield* fs.readFileString(PLUGIN_MANIFEST)
+      check(PLUGIN_MANIFEST, yield* extractJsonVersion(text, PLUGIN_MANIFEST))
+      pluginChecked = true
+    }
+
+    if (diffs.length > 0) return yield* new VersionMismatch({ expected, diffs })
+    return { expected, workspaceVersion, pluginChecked }
   })

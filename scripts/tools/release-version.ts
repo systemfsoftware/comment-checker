@@ -2,39 +2,18 @@
 
 import { runMain } from '@effect/platform-deno/DenoRuntime'
 import { layer as DenoPlatform } from '@effect/platform-deno/DenoServices'
-import { Console, Effect, FileSystem, Schema } from 'effect'
-
+import { Console, Effect, FileSystem } from 'effect'
+import { bumpAllSurfaces } from '../lib/version-files.ts'
 import {
-  Bump,
   CHANGELOG,
   CHANGESET_DIR,
   extractJsonVersion,
   MANIFEST,
   nextVersion,
+  parseChangeset,
+  RANK,
   type ReleaseBump,
 } from '../lib/version-sync.ts'
-import { bumpAllSurfaces } from '../lib/version-files.ts'
-
-const RANK: Record<ReleaseBump, number> = { patch: 1, minor: 2, major: 3 }
-
-const isReleaseBump = (bump: Bump): bump is ReleaseBump => bump !== 'none'
-
-class Intent extends Schema.Class<Intent>('Intent')({
-  path: Schema.String,
-  bump: Bump,
-  summary: Schema.String,
-}) {}
-
-const parseIntent = (path: string) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem
-    const body = yield* fs.readFileString(path)
-    const parts = body.split(/^---$/m)
-    const rawBump = /:\s*(major|minor|patch|none)/.exec(parts[1] ?? '')?.[1] ?? ''
-    const bump = yield* Schema.decodeUnknownEffect(Bump)(rawBump)
-    const summary = (parts[2] ?? '').trim().split('\n').join(' ')
-    return new Intent({ path, bump, summary })
-  })
 
 const program = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
@@ -45,20 +24,22 @@ const program = Effect.gen(function* () {
     return
   }
 
-  const intents = yield* Effect.all(pending.map((name) => parseIntent(`${CHANGESET_DIR}/${name}`)))
-  const releases = intents.filter((i) => isReleaseBump(i.bump))
+  const intents = yield* Effect.all(
+    pending.map((name) =>
+      Effect.gen(function* () {
+        const body = yield* fs.readFileString(`${CHANGESET_DIR}/${name}`)
+        return yield* parseChangeset(body, `${CHANGESET_DIR}/${name}`)
+      })
+    ),
+  )
+  const releases = intents.filter((i): i is typeof i & { bump: ReleaseBump } => i.bump !== 'none')
   if (releases.length === 0) {
     for (const i of intents) yield* fs.remove(i.path)
     yield* Console.log('only none intents; consumed without version bump')
     return
   }
 
-  const chosen = releases.sort((a, b) => {
-    const aBump = a.bump as ReleaseBump
-    const bBump = b.bump as ReleaseBump
-    return RANK[bBump] - RANK[aBump]
-  })[0]
-  const bump = chosen.bump as ReleaseBump
+  const bump = releases.reduce((acc, i) => RANK[i.bump] >= RANK[acc.bump] ? i : acc).bump
   const summary = releases.map((i) => `  - ${i.summary}`).join('\n')
   const manifestText = yield* fs.readFileString(MANIFEST)
   const version = yield* extractJsonVersion(manifestText, MANIFEST)
