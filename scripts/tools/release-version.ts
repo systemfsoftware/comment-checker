@@ -3,6 +3,8 @@
 const MANIFEST = 'npm/packages/comment-checker/package.json'
 const CHANGELOG = 'npm/packages/comment-checker/CHANGELOG.md'
 const WORKSPACE_CARGO = 'Cargo.toml'
+const ROOT_MANIFEST = 'package.json'
+const FLAKE_NIX = 'flake.nix'
 const RANK: Record<string, number> = { patch: 1, minor: 2, major: 3 }
 
 async function bumpCargoToml(path: string, next: string): Promise<void> {
@@ -30,6 +32,49 @@ async function bumpCargoToml(path: string, next: string): Promise<void> {
     throw new Error(`bumpCargoToml: no version found under ${targetHeader} in ${path}`)
   }
   await Deno.writeTextFile(path, lines.join('\n'))
+}
+
+async function bumpNixVersion(path: string, next: string): Promise<void> {
+  const original = await Deno.readTextFile(path)
+  const lines = original.split('\n')
+  let bumped = false
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim()
+    if (trimmed.startsWith('version = "') && !trimmed.startsWith('rust-version')) {
+      if (bumped) throw new Error(`bumpNixVersion: multiple version lines in ${path}`)
+      lines[i] = lines[i].replace(/version\s*=\s*"[^"]*"/, `version = "${next}"`)
+      bumped = true
+    }
+  }
+  if (!bumped) throw new Error(`bumpNixVersion: no version found in ${path}`)
+  await Deno.writeTextFile(path, lines.join('\n'))
+}
+
+async function bumpJsonVersion(path: string, next: string): Promise<void> {
+  const original = await Deno.readTextFile(path)
+  const parsed = JSON.parse(original) as { version?: string }
+  if (typeof parsed.version !== 'string') throw new Error(`bumpJsonVersion: no version in ${path}`)
+  parsed.version = next
+  await Deno.writeTextFile(path, `${JSON.stringify(parsed, null, 2).trimEnd()}\n`)
+}
+
+async function bumpPluginManifests(next: string): Promise<number> {
+  let count = 0
+  const candidates = ['.claude-plugin/plugin.json']
+  for (const p of candidates) {
+    try {
+      const content = await Deno.readTextFile(p)
+      const parsed = JSON.parse(content) as { version?: string }
+      if (typeof parsed.version === 'string') {
+        parsed.version = next
+        await Deno.writeTextFile(p, `${JSON.stringify(parsed, null, 2).trimEnd()}\n`)
+        count++
+      }
+    } catch (e) {
+      if (!(e instanceof Deno.errors.NotFound)) throw e
+    }
+  }
+  return count
 }
 
 type Intent = { path: string; bump: string; summary: string }
@@ -81,18 +126,22 @@ await Deno.writeTextFile(
   MANIFEST,
   `${JSON.stringify(manifest, null, 2).trimEnd()}\n`,
 )
-
-// Keep Rust crate versions locked to the npm version so --version matches the GitHub tag.
 await bumpCargoToml(WORKSPACE_CARGO, next)
 for await (const entry of Deno.readDir('crates')) {
   if (!entry.isDirectory) continue
-  const crateManifest = `crates/${entry.name}/Cargo.toml`
+  const path = `crates/${entry.name}/Cargo.toml`
   try {
-    await bumpCargoToml(crateManifest, next)
+    await bumpCargoToml(path, next)
   } catch (e) {
     if (e instanceof Deno.errors.NotFound) continue
     throw e
   }
+}
+await bumpNixVersion(FLAKE_NIX, next)
+await bumpJsonVersion(ROOT_MANIFEST, next)
+const pluginCount = await bumpPluginManifests(next)
+if (pluginCount === 0) {
+  console.log('plugin manifest: none tracked — skipped')
 }
 
 let changelog = '# Changelog\n'
