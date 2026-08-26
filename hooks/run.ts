@@ -1,13 +1,13 @@
 #!/usr/bin/env -S deno run --allow-read --allow-run=comment-checker,direnv,bwrap --allow-env=CLAUDE_PROJECT_DIR,PATH,HOME
 
-export type Host = {
+type Host = {
   projectDir: string
   which: (name: string) => string | undefined
   fileExists: (path: string) => boolean
   fileHead: (path: string) => string
 }
 
-export type Launch =
+type Launch =
   | { kind: 'run'; cmd: string; args: string[] }
   | { kind: 'missing'; hint: string }
 
@@ -16,7 +16,7 @@ const ELF = '\x7fELF'
 const MACHO_64BE = '\xcf\xfa\xed\xfe'
 const MACHO_64LE = '\xfe\xed\xfa\xcf'
 
-export function planLaunch(host: Host): Launch {
+function planLaunch(host: Host): Launch {
   const checker = host.which('comment-checker')
   if (checker !== undefined) {
     if (host.which('bwrap') !== undefined && shouldBwrap(checker, host.fileHead(checker))) {
@@ -46,12 +46,12 @@ export function planLaunch(host: Host): Launch {
   }
 }
 
-export function shouldBwrap(binPath: string, head: string): boolean {
+function shouldBwrap(binPath: string, head: string): boolean {
   if (head.includes('bwrap')) return false
   return head.startsWith(ELF) || head.startsWith(MACHO_64BE) || head.startsWith(MACHO_64LE)
 }
 
-export function bwrapArgs(
+function bwrapArgs(
   binPath: string,
   projectDir: string,
   fileExists: (path: string) => boolean,
