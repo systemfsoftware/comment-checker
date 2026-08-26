@@ -1,5 +1,11 @@
 #!/usr/bin/env -S deno run --allow-read
 
+import { type } from 'arktype'
+
+const Semver = type('string')
+const isNotFound = (e: unknown): boolean =>
+  e !== null && typeof e === 'object' && 'name' in e && Reflect.get(e, 'name') === 'NotFound'
+
 function extractVersion(content: string, header: string): string | null {
   const lines = content.split("\n");
   let inTarget = false;
@@ -9,7 +15,7 @@ function extractVersion(content: string, header: string): string | null {
       inTarget = trimmed === header;
     } else if (inTarget && trimmed.startsWith("version")) {
       const m = /version\s*=\s*"([^"]+)"/.exec(trimmed);
-      if (m) return m[1];
+      if (m) return Semver.assert(m[1]);
     }
   }
   return null;
@@ -20,14 +26,20 @@ function extractNixVersion(content: string): string | null {
     const trimmed = line.trim();
     if (trimmed.startsWith('version = "')) {
       const m = /version\s*=\s*"([^"]+)"/.exec(trimmed);
-      if (m) return m[1];
+      if (m) return Semver.assert(m[1]);
     }
   }
   return null;
 }
 
-const npmManifest = JSON.parse(await Deno.readTextFile("npm/packages/comment-checker/package.json"));
-const npmVersion = npmManifest.version as string;
+function extractJsonVersion(text: string, path: string): string {
+  const m = /"version"\s*:\s*"([^"]+)"/.exec(text)
+  if (!m) throw new Error(`no version field in ${path}`)
+  return Semver.assert(m[1])
+}
+
+const npmText = await Deno.readTextFile("npm/packages/comment-checker/package.json")
+const npmVersion = extractJsonVersion(npmText, "npm/packages/comment-checker/package.json")
 
 const workspaceContent = await Deno.readTextFile("Cargo.toml");
 const workspaceVersion = extractVersion(workspaceContent, "[workspace.package]");
@@ -51,7 +63,7 @@ for await (const entry of Deno.readDir("crates")) {
       mismatches.push(`${path} ${crateVersion} != npm ${npmVersion}`);
     }
   } catch (e) {
-    if (e instanceof Deno.errors.NotFound) continue;
+    if (isNotFound(e)) continue;
     throw e;
   }
 }
@@ -63,31 +75,31 @@ try {
     mismatches.push(`flake.nix ${nixVersion} != npm ${npmVersion}`);
   }
 } catch (e) {
-  if (!(e instanceof Deno.errors.NotFound)) throw e;
+  if (!isNotFound(e)) throw e;
 }
-
 try {
-  const rootManifest = JSON.parse(await Deno.readTextFile("package.json"));
-  const rootVersion = rootManifest.version as string | undefined;
-  if (rootVersion && rootVersion !== npmVersion) {
+  const rootText = await Deno.readTextFile("package.json")
+  const rootVersion = extractJsonVersion(rootText, "package.json")
+  if (rootVersion !== npmVersion) {
     mismatches.push(`package.json root ${rootVersion} != npm ${npmVersion}`);
   }
 } catch (e) {
-  if (!(e instanceof Deno.errors.NotFound)) throw e;
+  if (!isNotFound(e)) throw e;
 }
 
 let pluginChecked = 0;
 for (const p of [".claude-plugin/plugin.json"]) {
   try {
     const content = await Deno.readTextFile(p);
-    const parsed = JSON.parse(content) as { version?: string };
-    if (typeof parsed.version === "string" && parsed.version !== npmVersion) {
-      mismatches.push(`${p} ${parsed.version} != npm ${npmVersion}`);
+    const pluginVersion = extractJsonVersion(content, p)
+    if (pluginVersion !== npmVersion) {
+      mismatches.push(`${p} ${pluginVersion} != npm ${npmVersion}`);
     }
     pluginChecked++;
   } catch (e) {
-    if (e instanceof Deno.errors.NotFound) continue;
-    if (e instanceof SyntaxError) continue;
+    if (isNotFound(e)) continue;
+    const isSyntax = e !== null && typeof e === 'object' && 'name' in e && Reflect.get(e, 'name') === 'SyntaxError'
+    if (isSyntax) continue;
     throw e;
   }
 }

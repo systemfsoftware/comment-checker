@@ -1,5 +1,7 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-env
 
+import { type } from 'arktype'
+
 const MANIFEST = 'npm/packages/comment-checker/package.json'
 const CHANGELOG = 'npm/packages/comment-checker/CHANGELOG.md'
 const WORKSPACE_CARGO = 'Cargo.toml'
@@ -7,6 +9,20 @@ const ROOT_MANIFEST = 'package.json'
 const FLAKE_NIX = 'flake.nix'
 const RANK: Record<string, number> = { patch: 1, minor: 2, major: 3 }
 
+const Semver = type('string')
+const isNotFound = (e: unknown): boolean =>
+  e !== null && typeof e === 'object' && 'name' in e && Reflect.get(e, 'name') === 'NotFound'
+
+function extractJsonVersion(text: string, path: string): string {
+  const m = /"version"\s*:\s*"([^"]+)"/.exec(text)
+  if (!m) throw new Error(`no version field in ${path}`)
+  return Semver.assert(m[1])
+}
+function replaceJsonVersion(text: string, next: string, path: string): string {
+  Semver.assert(next)
+  if (!/"version"\s*:\s*"[^"]*"/.test(text)) throw new Error(`no version field in ${path}`)
+  return text.replace(/"version"\s*:\s*"[^"]*"/, `"version": "${next}"`)
+}
 async function bumpCargoToml(path: string, next: string): Promise<void> {
   const original = await Deno.readTextFile(path)
   const lines = original.split('\n')
@@ -52,10 +68,7 @@ async function bumpNixVersion(path: string, next: string): Promise<void> {
 
 async function bumpJsonVersion(path: string, next: string): Promise<void> {
   const original = await Deno.readTextFile(path)
-  const parsed = JSON.parse(original) as { version?: string }
-  if (typeof parsed.version !== 'string') throw new Error(`bumpJsonVersion: no version in ${path}`)
-  parsed.version = next
-  await Deno.writeTextFile(path, `${JSON.stringify(parsed, null, 2).trimEnd()}\n`)
+  await Deno.writeTextFile(path, replaceJsonVersion(original, next, path))
 }
 
 async function bumpPluginManifests(next: string): Promise<number> {
@@ -64,19 +77,14 @@ async function bumpPluginManifests(next: string): Promise<number> {
   for (const p of candidates) {
     try {
       const content = await Deno.readTextFile(p)
-      const parsed = JSON.parse(content) as { version?: string }
-      if (typeof parsed.version === 'string') {
-        parsed.version = next
-        await Deno.writeTextFile(p, `${JSON.stringify(parsed, null, 2).trimEnd()}\n`)
-        count++
-      }
+      await Deno.writeTextFile(p, replaceJsonVersion(content, next, p))
+      count++
     } catch (e) {
-      if (!(e instanceof Deno.errors.NotFound)) throw e
+      if (!isNotFound(e)) throw e
     }
   }
   return count
 }
-
 type Intent = { path: string; bump: string; summary: string }
 
 async function parseIntent(path: string): Promise<Intent> {
@@ -117,23 +125,18 @@ if (releases.length === 0) {
 
 const bump = releases.sort((a, b) => RANK[b.bump] - RANK[a.bump])[0].bump
 const summary = releases.map((i) => `  - ${i.summary}`).join('\n')
-const manifest = JSON.parse(await Deno.readTextFile(MANIFEST))
-const version = manifest.version as string
+const manifestText = await Deno.readTextFile(MANIFEST)
+const version = extractJsonVersion(manifestText, MANIFEST)
 const next = nextVersion(version, bump)
 
-manifest.version = next
-await Deno.writeTextFile(
-  MANIFEST,
-  `${JSON.stringify(manifest, null, 2).trimEnd()}\n`,
-)
-await bumpCargoToml(WORKSPACE_CARGO, next)
+await Deno.writeTextFile(MANIFEST, replaceJsonVersion(manifestText, next, MANIFEST))
 for await (const entry of Deno.readDir('crates')) {
   if (!entry.isDirectory) continue
   const path = `crates/${entry.name}/Cargo.toml`
   try {
     await bumpCargoToml(path, next)
   } catch (e) {
-    if (e instanceof Deno.errors.NotFound) continue
+    if (isNotFound(e)) continue
     throw e
   }
 }
