@@ -6,21 +6,14 @@ import { Console, Effect, FileSystem, Schema } from 'effect'
 
 import {
   Bump,
-  bumpCrateTomls,
-  bumpJsonFile,
-  bumpNixFile,
-  bumpPluginIfPresent,
-  bumpTomlFile,
   CHANGELOG,
   CHANGESET_DIR,
   extractJsonVersion,
-  FLAKE_NIX,
   MANIFEST,
   nextVersion,
   type ReleaseBump,
-  ROOT_MANIFEST,
-  WORKSPACE_CARGO,
 } from '../lib/version-sync.ts'
+import { bumpAllSurfaces } from '../lib/version-files.ts'
 
 const RANK: Record<ReleaseBump, number> = { patch: 1, minor: 2, major: 3 }
 
@@ -71,12 +64,7 @@ const program = Effect.gen(function* () {
   const version = yield* extractJsonVersion(manifestText, MANIFEST)
   const next = yield* nextVersion(version, bump)
 
-  yield* bumpJsonFile(MANIFEST, next)
-  yield* bumpTomlFile(WORKSPACE_CARGO, '[workspace.package]', next)
-  yield* bumpCrateTomls(next)
-  yield* bumpNixFile(FLAKE_NIX, next)
-  yield* bumpJsonFile(ROOT_MANIFEST, next)
-  const pluginBumped = yield* bumpPluginIfPresent(next)
+  const pluginBumped = yield* bumpAllSurfaces(next)
   if (!pluginBumped) {
     yield* Console.log('plugin manifest: none tracked — skipped')
   }
