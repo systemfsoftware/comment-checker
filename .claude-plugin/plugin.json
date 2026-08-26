@@ -1,7 +1,7 @@
 {
   "name": "comment-checker",
   "version": "0.2.0",
-  "description": "PostToolUse hook that flags unnecessary comments. Resolves comment-checker via PATH or direnv, names flake.nix when that is why it is missing, and runs a native binary under bwrap when bubblewrap is installed.",
+  "description": "PostToolUse hook that flags unnecessary comments. Runs comment-checker --strip, then direnv exec if it is missing. Names flake.nix when that is why it is missing.",
   "author": {
     "name": "systemfsoftware",
     "url": "https://github.com/systemfsoftware/comment-checker"

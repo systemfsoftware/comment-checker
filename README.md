@@ -67,7 +67,7 @@ Add the hook to user (`~/.claude/settings.json`) or project (`.claude/settings.j
 }
 ```
 
-Or install this repo as a Claude Code plugin. The hook finds `comment-checker` on PATH or via `direnv exec`, names `flake.nix` when that is why it is missing, and runs a native binary under `bwrap` when bubblewrap is installed. It passes `--strip`. Deno must be on PATH.
+Or install this repo as a Claude Code plugin. The hook runs `comment-checker --strip`, then `direnv exec` if that binary is missing. A `flake.nix` in the project makes the error tell you to `direnv allow` or `nix develop` (the flake wraps the checker in bwrap). Deno must be on PATH.
 
 ```bash
 claude --plugin-dir .
