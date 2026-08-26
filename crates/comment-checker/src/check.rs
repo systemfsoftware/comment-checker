@@ -5,13 +5,18 @@ use crate::classify::classify;
 use crate::comment::{Comment, PositionRole};
 use crate::detect::detect_comments;
 use crate::hook::{HookInput, decode};
-use crate::report::{Flagged, format_report};
+use crate::report::{Finding, Flagged, format_report, reason_text};
 
 /// The outcome of a hook check: pass (with a note) or block (with a report).
 #[derive(Debug, Eq, PartialEq)]
 pub enum Outcome {
-    Pass { note: String },
-    Block { report: String },
+    Pass {
+        note: String,
+    },
+    Block {
+        report: String,
+        findings: Vec<Finding>,
+    },
 }
 
 /// Run the check over the raw hook JSON.
@@ -26,14 +31,39 @@ pub fn check(input: &str, custom_prompt: &str) -> Outcome {
     }
 
     let comments = detect_for(&hook, file_path);
-    let flagged = flag_unnecessary(&comments);
+    decide(file_path, &comments, custom_prompt)
+}
+
+/// Run the check over file contents as a completed `Write`.
+#[must_use]
+pub fn check_source(file_path: &str, content: &str, custom_prompt: &str) -> Outcome {
+    let comments = detect_comments(content, file_path);
+    decide(file_path, &comments, custom_prompt)
+}
+
+fn decide(file_path: &str, comments: &[Comment], custom_prompt: &str) -> Outcome {
+    let flagged = flag_unnecessary(comments);
     if flagged.is_empty() {
         return pass("No unnecessary comments found");
     }
 
+    let findings = findings_from(&flagged);
     Outcome::Block {
         report: format_report(&flagged, file_path, custom_prompt),
+        findings,
     }
+}
+
+fn findings_from(flagged: &[Flagged<'_>]) -> Vec<Finding> {
+    flagged
+        .iter()
+        .map(|flag| Finding {
+            line_number: flag.comment.line_number,
+            text: flag.comment.text.clone(),
+            reason: reason_text(&flag.kind),
+            position: flag.comment.context.as_ref().map(|ctx| ctx.position),
+        })
+        .collect()
 }
 
 /// The content a tool writes, and for edits only the newly-added comments.

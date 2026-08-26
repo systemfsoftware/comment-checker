@@ -5,7 +5,7 @@
 
 Comment-checker is a `PostToolUse` hook for Claude Code that flags unnecessary code comments and states the exact reason each one fails. It is an alternative to flag-everything comment linters that train agents to ignore warnings: a tree-sitter classifier over 37 languages, gated to F1 ≥ 0.85 on a 60-case corpus, that spares public API docs, directives, and non-obvious intent.
 
-It never edits your files, never sends code anywhere, and exits deterministically so the hook can gate automation.
+Without `--strip` it never edits your files. It never sends code anywhere, and it exits deterministically so the hook can gate automation.
 
 ```bash
 pnpm add -g @systemfsoftware/claude-code-comment-checker
@@ -143,6 +143,20 @@ comment-checker --prompt "Review feedback:\n\n{{comments}}\n\nRevise the code."
 }
 ```
 
+### Strip flagged comments
+
+Pass `--strip` to delete whole-line flagged comments from the file named in the payload. Trailing and inline comments (those sharing a line with code) stay in the file and are reported. If the file is missing, `--strip` is report-only — same as the default.
+
+```bash
+comment-checker --strip
+```
+
+```json
+{
+  "hooks": { "PostToolUse": [ { "matcher": "Write|Edit|MultiEdit", "hooks": [ { "type": "command", "command": "comment-checker --strip" } ] } ] }
+}
+```
+
 ### Exit codes
 
 Deterministic, and the reason sessions and scripts can gate on the hook:
@@ -158,7 +172,7 @@ Deterministic, and the reason sessions and scripts can gate on the hook:
 A: Make sure the package manager's global bin directory is on `PATH`. Check with `pnpm bin -g` (or `npm bin -g`); npm global bins can otherwise land outside the shell path on some setups.
 
 **Q: Does it modify my files?**
-A: No. It reads a hook payload over stdin and prints a report; nothing is written to disk.
+A: Not unless you pass `--strip`. The default reads a hook payload over stdin and prints a report. `--strip` deletes whole-line flagged comments from the named file; trailing and inline comments are left in place.
 
 **Q: Does it send my code anywhere?**
 A: No network requests at all. The binary is fully offline.

@@ -1,6 +1,6 @@
 //! Shape the warning report (CONST-B3: shape is pure).
 
-use crate::comment::{Comment, UnnecessaryKind};
+use crate::comment::{Comment, PositionRole, UnnecessaryKind};
 
 /// A comment the classifier marked unnecessary, kept for the report.
 #[derive(Clone, Debug)]
@@ -8,6 +8,16 @@ pub struct Flagged<'a> {
     pub comment: &'a Comment,
     pub kind: UnnecessaryKind,
 }
+
+/// An owned flagged comment the shell can strip or reprint.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Finding {
+    pub line_number: usize,
+    pub text: String,
+    pub reason: String,
+    pub position: Option<PositionRole>,
+}
+
 #[must_use]
 pub fn format_report(flagged: &[Flagged<'_>], file_path: &str, custom_prompt: &str) -> String {
     let header = format!(
@@ -36,7 +46,59 @@ pub fn format_report(flagged: &[Flagged<'_>], file_path: &str, custom_prompt: &s
         "one, make the code self-explanatory instead — better names, extraction,".to_string(),
     );
     lines.push("a clearer type — and do not re-add the comment.".to_string());
-    let report = lines.join("\n");
+    apply_prompt(lines.join("\n"), custom_prompt)
+}
+
+/// Residual message after `--strip`: what was deleted, and what still needs a rewrite.
+#[must_use]
+pub fn format_strip_report(
+    file_path: &str,
+    deleted: &[Finding],
+    remaining: &[Finding],
+    custom_prompt: &str,
+) -> String {
+    let mut lines = Vec::new();
+    if !deleted.is_empty() {
+        lines.push(format!(
+            "Deleted {} comment(s) from {file_path}. The code has to carry that meaning now:",
+            deleted.len()
+        ));
+        for finding in deleted {
+            let first = finding.text.lines().next().unwrap_or("").trim();
+            lines.push(format!("  was: {first} — {}", finding.reason));
+        }
+        lines.push(String::new());
+        lines.push(
+            "Do this: rename the identifiers, extract the expression, or tighten the type until the deleted text would be redundant.".to_string(),
+        );
+    }
+    if !remaining.is_empty() {
+        if !lines.is_empty() {
+            lines.push(String::new());
+        }
+        lines.push(format!(
+            "{} comment(s) in {file_path} need a rewrite rather than a cut (trailing or inline):",
+            remaining.len()
+        ));
+        for finding in remaining {
+            let first = finding.text.lines().next().unwrap_or("").trim();
+            lines.push(format!(
+                "  line {} — {first} — {}",
+                finding.line_number, finding.reason
+            ));
+        }
+        lines.push(String::new());
+        lines.push(
+            "Do this: change those lines so the comment has nothing left to state.".to_string(),
+        );
+    }
+    if lines.is_empty() {
+        return String::new();
+    }
+    apply_prompt(format!("{}\n", lines.join("\n")), custom_prompt)
+}
+
+fn apply_prompt(report: String, custom_prompt: &str) -> String {
     if custom_prompt.is_empty() {
         report
     } else {
@@ -44,7 +106,7 @@ pub fn format_report(flagged: &[Flagged<'_>], file_path: &str, custom_prompt: &s
     }
 }
 
-fn reason_text(kind: &UnnecessaryKind) -> String {
+pub(crate) fn reason_text(kind: &UnnecessaryKind) -> String {
     match kind {
         UnnecessaryKind::NarratesControlFlow { construct, .. } => {
             format!("narrates the {construct} construct the code already shows")

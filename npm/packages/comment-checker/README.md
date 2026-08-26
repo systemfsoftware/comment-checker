@@ -1,6 +1,6 @@
 # @systemfsoftware/claude-code-comment-checker
 
-A Claude Code `PostToolUse` hook that flags unnecessary code comments and states the exact reason each one fails — an alternative to flag-everything linters, gated to F1 ≥ 0.85 on a 60-case, 37-language corpus. It never edits your files and never sends code anywhere.
+A Claude Code `PostToolUse` hook that flags unnecessary code comments and states the exact reason each one fails — an alternative to flag-everything linters, gated to F1 ≥ 0.85 on a 60-case, 37-language corpus. Without `--strip` it never edits your files. It never sends code anywhere.
 
 ## Install
 
@@ -35,6 +35,6 @@ When comments are flagged it writes the report, with per-comment reasons, to std
 
 ## Docs
 
-- Full documentation: comments flagged, comments spared, languages, and `--prompt` configuration — [the project README](https://github.com/systemfsoftware/comment-checker/blob/master/README.md)
+- Full documentation: comments flagged, comments spared, languages, plus `--prompt` and `--strip` — [the project README](https://github.com/systemfsoftware/comment-checker/blob/master/README.md)
 - License: [Apache-2.0](https://github.com/systemfsoftware/comment-checker/blob/master/LICENSE)
 - Development and contributing: [AGENTS.md](https://github.com/systemfsoftware/comment-checker/blob/master/AGENTS.md)

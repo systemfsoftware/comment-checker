@@ -87,7 +87,7 @@ fn multi_edit_new_todo_comment_blocks() {
 #[test]
 fn report_names_the_reason() {
     let input = write("foo.go", "// TODO: refactor later\n");
-    let Outcome::Block { report } = check(&input, "") else {
+    let Outcome::Block { report, .. } = check(&input, "") else {
         panic!("expected a block");
     };
     assert!(
@@ -101,7 +101,7 @@ fn report_cites_restate_evidence() {
     // The block reason must show the overlap the verdict was built on, so the
     // flag is checkable rather than hand-waved.
     let input = write("foo.rs", "// increment the counter\ncounter += 1;\n");
-    let Outcome::Block { report } = check(&input, "") else {
+    let Outcome::Block { report, .. } = check(&input, "") else {
         panic!("expected a block");
     };
     assert!(
