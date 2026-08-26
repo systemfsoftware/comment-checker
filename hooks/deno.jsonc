@@ -1,0 +1,16 @@
+{
+  "lock": "./deno.lock",
+  "imports": {
+    "@std/bytes": "jsr:@std/bytes@1.0.6",
+    "@std/fs": "jsr:@std/fs@1.0.19",
+    "@std/io": "jsr:@std/io@0.225.2",
+    "@std/path": "jsr:@std/path@1.1.6",
+    "arktype": "npm:arktype@2.2.3"
+  },
+  "fmt": {
+    "lineWidth": 100,
+    "indentWidth": 2,
+    "singleQuote": true,
+    "semiColons": false
+  }
+}

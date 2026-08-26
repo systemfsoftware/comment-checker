@@ -5,7 +5,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "deno run --allow-read --allow-run=comment-checker,direnv,bwrap --allow-env=CLAUDE_PROJECT_DIR,PATH,HOME \"${CLAUDE_PLUGIN_ROOT}/hooks/run.ts\"",
+          "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.ts\"",
           "timeout": 30
         }
       ]
