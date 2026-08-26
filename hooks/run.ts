@@ -6,7 +6,7 @@ import { DELIMITER, join } from '@std/path'
 import { type } from 'arktype'
 
 const Env = type({
-  CLAUDE_PROJECT_DIR: 'string.trim |> string > 0',
+  CLAUDE_PROJECT_DIR: type('string.trim').pipe(type('string').atLeastLength(1)),
   'PATH?': type('string').pipe((s: string) =>
     s.split(DELIMITER).filter((dir) => dir.length > 0)
   ),
