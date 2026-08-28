@@ -40,3 +40,7 @@
 
   - This repository is also a Claude Code plugin. Enabling it runs a PostToolUse hook that tries `comment-checker --strip`, then `direnv exec`. If both miss and the project has `flake.nix`, the error tells you to run `direnv allow` or `nix develop`.
   - `--strip` deletes whole-line flagged comments from the file named in the hook payload. Without the flag, the hook still only reports. After a strip, the message names a code change to make — rename, extract, or tighten a type — instead of asking you to delete the comment.
+
+## 0.3.1
+
+  - The `PostToolUse` hook is shipped as compiled `run.js` instead of `run.ts`, so it runs on Deno versions that refuse type-stripping inside `node_modules`. Type-checking is preserved through JSDoc annotations and `checkJs` in `hooks/deno.jsonc`.
