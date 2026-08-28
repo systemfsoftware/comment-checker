@@ -1,5 +1,8 @@
 {
   "lock": "./deno.lock",
+  "compilerOptions": {
+    "checkJs": true
+  },
   "imports": {
     "@std/fs": "jsr:@std/fs@1.0.19",
     "@std/io": "jsr:@std/io@0.225.2",
