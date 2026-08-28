@@ -21,7 +21,11 @@ if (env instanceof type.errors) {
   Deno.exit(1)
 }
 
-async function run(cmd: string, args: string[]): Promise<number | undefined> {
+/** @param {string} cmd
+ * @param {string[]} args
+ * @returns {Promise<number | undefined>}
+ */
+async function run(cmd, args) {
   try {
     const { code } = await new Deno.Command(cmd, {
       args,
