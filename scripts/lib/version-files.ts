@@ -1,5 +1,5 @@
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process'
-import { Crypto, Effect, FileSystem, Schema } from 'effect'
+import { Crypto, Effect, FileSystem, Schema, Stream } from 'effect'
 import { sriFromSha256, type Target, TARGETS_PATH, unixTargetTriples } from './shared.ts'
 import {
   CRATES_DIR,
@@ -163,11 +163,12 @@ const sriOfDigest = (bytes: Uint8Array) =>
 const remoteReleaseTags = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
   const lsRemote = ChildProcess.make('git', ['ls-remote', '--tags', 'origin'])
-  const exit = yield* spawner.exitCode(lsRemote)
+  const handle = yield* spawner.spawn(lsRemote)
+  const exit = yield* handle.exitCode
   if (exit !== 0) {
     return yield* new FlakeRemoteUnreachable()
   }
-  const text = yield* spawner.string(lsRemote)
+  const text = yield* Stream.mkString(Stream.decodeText(handle.stdout))
   return [
     ...new Set(
       [...text.matchAll(/refs\/tags\/v(\d+\.\d+\.\d+)(\^\{\})?$/gm)].map((m) => m[1]),
@@ -197,7 +198,9 @@ export const checkFlakeHashes = () =>
     const tagExists = releaseTags.includes(declared)
 
     if (!tagExists) {
-      const newest = releaseTags.slice().sort((a, b) => newerThan(a, b) ? 1 : -1).at(-1)
+      const newest = releaseTags.slice().sort((a, b) =>
+        newerThan(a, b) ? 1 : newerThan(b, a) ? -1 : 0
+      ).at(-1)
       if (newest === undefined || newerThan(declared, newest)) {
         return { stale: [], skipped: `tag ${tag} absent (version bump in flight)` }
       }
@@ -214,7 +217,7 @@ export const checkFlakeHashes = () =>
         Effect.forEach(triples, (triple) =>
           Effect.gen(function* () {
             const assetName = `comment-checker-${triple}`
-            const code = yield* spawner.exitCode(
+            const download = spawner.exitCode(
               ChildProcess.make('gh', [
                 'release',
                 'download',
@@ -225,8 +228,14 @@ export const checkFlakeHashes = () =>
                 dir,
                 '--clobber',
               ]),
+            ).pipe(
+              Effect.filterOrFail((c) => c === 0, () => 'download-failed' as const),
+              Effect.retry({ times: 2 }),
+              Effect.orElseSucceed(() => false),
+              Effect.map(() => true),
             )
-            if (code !== 0) {
+            const ok = yield* download
+            if (!ok) {
               return { triple, reason: 'download-failed' as const }
             }
             const bytes = yield* fs.readFile(`${dir}/${assetName}`)

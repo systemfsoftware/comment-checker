@@ -12,10 +12,17 @@
 //
 // DRY_RUN=1 prints the would-be PR without mutating anything.
 
-import { sriFromSha256, type Target, TARGETS_PATH, unixTargetTriples } from '../lib/shared.ts'
+import {
+  LAUNCHER_MANIFEST_PATH,
+  sriFromSha256,
+  type Target,
+  TARGETS_PATH,
+  unixTargetTriples,
+} from '../lib/shared.ts'
+import { FLAKE_NIX } from '../lib/version-sync.ts'
 
-const MANIFEST = 'npm/packages/comment-checker/package.json'
-const FLAKE = 'flake.nix'
+const MANIFEST = LAUNCHER_MANIFEST_PATH
+const FLAKE = FLAKE_NIX
 const BRANCH_PREFIX = 'fix/flake-hashes-'
 const BASE = 'master'
 
@@ -120,24 +127,43 @@ const prBody =
 // Bound the broken-window: from tag creation until this PR merges, a fresh
 // nix build of master fails (declared version + old hashes). Auto-merge lands
 // it as soon as CI passes when branch protection permits bot auto-merge.
-const prNumber = (await exec('gh', [
+// A retried publish must reuse the open PR instead of failing on a duplicate
+// create — the rerun rewrites the branch (force-push) and edits the body.
+const existingPr = await exec('gh', [
   'pr',
-  'create',
-  '--base',
-  BASE,
+  'list',
   '--head',
   branch,
-  '--title',
-  `fix(flake): sync v${version} release asset hashes`,
-  '--body',
-  prBody,
+  '--state',
+  'open',
   '--json',
   'number',
   '--jq',
-  '.number',
-])).trim()
-console.log(`sync-flake-hashes: opened PR for ${branch} (${prNumber})`)
-
-if (prNumber) {
-  await exec('gh', ['pr', 'merge', '--auto', '--squash', prNumber], true)
+  '.[0].number // empty',
+])
+let prNumber: string
+if (existingPr) {
+  await exec('gh', ['pr', 'edit', existingPr, '--body', prBody])
+  prNumber = existingPr
+  console.log(`sync-flake-hashes: updated PR ${prNumber} for ${branch}`)
+} else {
+  prNumber = (await exec('gh', [
+    'pr',
+    'create',
+    '--base',
+    BASE,
+    '--head',
+    branch,
+    '--title',
+    `fix(flake): sync v${version} release asset hashes`,
+    '--body',
+    prBody,
+    '--json',
+    'number',
+    '--jq',
+    '.number',
+  ])).trim()
+  console.log(`sync-flake-hashes: opened PR ${prNumber} for ${branch}`)
 }
+
+await exec('gh', ['pr', 'merge', '--auto', '--squash', prNumber], true)
