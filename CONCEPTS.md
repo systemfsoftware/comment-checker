@@ -81,6 +81,22 @@ surface, because an exact-key restore suppresses the post-run save: a
 narrower transport key does not replay stale verdicts, it discards fresh
 ones.
 
+## Plugin packaging
+
+### Marketplace catalog
+An index that lets a Claude Code / OMP installer discover and pull a plugin
+from a marketplace source. Distinct from the plugin manifest: the catalog
+declares the marketplace and lists each plugin with a source, while the
+manifest carries the plugin's authoritative name and version. A catalog
+carries no version of its own — the version lives only in the manifest, so
+the catalog is not a release surface.
+
+### Version-sync surface
+The explicit, enumerated set of manifests a release bump updates atomically.
+A manifest not on the list is intentionally outside the gate: keeping a file
+off the surface means its version can never drift out of step, and adding a
+manifest to it is a deliberate decision, not a default.
+
 ## Flagged ambiguities
 
 - "context" had been used for both the language (scope/position) and the
