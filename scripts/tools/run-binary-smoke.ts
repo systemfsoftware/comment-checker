@@ -1,6 +1,7 @@
 #!/usr/bin/env -S deno run --allow-run --allow-read
 
 import { parseArgs } from '@std/cli/parse-args'
+import { parse as parseToml } from '@std/toml'
 import { type Target, TARGETS_PATH } from '../lib/shared.ts'
 
 const flags = parseArgs(Deno.args, {
@@ -53,6 +54,19 @@ if (cleanRc !== 0) {
 const flaggedRc = await runWithInput(binPath, flaggedPayload)
 if (flaggedRc !== 2) {
   console.error(`flagged payload exited ${flaggedRc}, expected 2`)
+  Deno.exit(1)
+}
+
+const workspaceManifest = parseToml(await Deno.readTextFile('Cargo.toml'))
+const expectedVersion = workspaceManifest.workspace.package.version as string
+const versionProc = new Deno.Command(binPath, { args: ['--version'], stdout: 'piped', stderr: 'piped' })
+  .outputSync()
+const versionLine = new TextDecoder().decode(versionProc.stdout).trim()
+const versionMatch = /claude-code-comment-checker\s+(\d+\.\d+\.\d+)/.exec(versionLine)
+if (!versionMatch || versionMatch[1] !== expectedVersion) {
+  console.error(
+    `version assertion failed: binary reports '${versionLine}', expected claude-code-comment-checker ${expectedVersion}`,
+  )
   Deno.exit(1)
 }
 
