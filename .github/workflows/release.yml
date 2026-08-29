@@ -70,8 +70,36 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./scripts/tools/create-or-update-release-pr.ts
 
-  release:
+  rust-gate:
     needs: plan
+    if: needs.plan.outputs.phase == 'publish'
+    uses: ./.github/workflows/rust-gate.yml
+    permissions:
+      contents: read
+
+  js-gate:
+    needs: plan
+    if: needs.plan.outputs.phase == 'publish'
+    uses: ./.github/workflows/js-gate.yml
+    permissions:
+      contents: read
+
+  tools:
+    needs: plan
+    if: needs.plan.outputs.phase == 'publish'
+    uses: ./.github/workflows/tools.yml
+    permissions:
+      contents: read
+
+  mutation:
+    needs: plan
+    if: needs.plan.outputs.phase == 'publish'
+    uses: ./.github/workflows/mutation.yml
+    permissions:
+      contents: read
+
+  release:
+    needs: [plan, rust-gate, js-gate, tools, mutation]
     if: needs.plan.outputs.phase == 'publish'
     uses: ./.github/workflows/platform.yml
     with:
@@ -80,7 +108,7 @@ jobs:
       contents: read
 
   publish:
-    needs: [plan, release]
+    needs: [plan, release, rust-gate, js-gate, tools, mutation]
     if: needs.plan.outputs.phase == 'publish'
     name: publish · oidc · tag
     runs-on: ubuntu-latest
