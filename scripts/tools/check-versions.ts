@@ -19,4 +19,4 @@ const program = Effect.gen(function* () {
   )
 })
 
-runMain(program.pipe(Effect.provide(DenoPlatform)))
+runMain(Effect.scoped(program).pipe(Effect.provide(DenoPlatform)))

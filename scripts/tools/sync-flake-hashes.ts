@@ -12,7 +12,7 @@
 //
 // DRY_RUN=1 prints the would-be PR without mutating anything.
 
-import { type Target, TARGETS_PATH } from '../lib/shared.ts'
+import { sriFromSha256, type Target, TARGETS_PATH, unixTargetTriples } from '../lib/shared.ts'
 
 const MANIFEST = 'npm/packages/comment-checker/package.json'
 const FLAKE = 'flake.nix'
@@ -31,10 +31,10 @@ async function exec(cmd: string, args: string[], allowFail = false): Promise<str
   return new TextDecoder().decode(out.stdout).trim()
 }
 
-async function sha256Sri(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', bytes)
-  const raw = new Uint8Array(digest)
-  return `sha256-${btoa(String.fromCharCode(...raw))}`
+const sha256Sri = async (bytes: Uint8Array): Promise<string> => {
+  const copy = new Uint8Array(bytes.length)
+  copy.set(bytes)
+  return sriFromSha256(new Uint8Array(await crypto.subtle.digest('SHA-256', copy)))
 }
 
 function rewriteFlakeHashes(text: string, srIs: Map<string, string>): string {
@@ -45,7 +45,8 @@ function rewriteFlakeHashes(text: string, srIs: Map<string, string>): string {
     if (!match) {
       throw new Error(`flake.nix: no hash entry for ${triple}`)
     }
-    out = out.slice(0, match.index) + match[1] + `"${sri}"` + out.slice(match.index + match[0].length)
+    out = out.slice(0, match.index) + match[1] + `"${sri}"` +
+      out.slice(match.index + match[0].length)
   }
   return out
 }
@@ -55,21 +56,24 @@ const version = launcherManifest.version as string
 const targets: Target[] = JSON.parse(await Deno.readTextFile(TARGETS_PATH))
 // The flake hash block has one key per unix triple; the windows row has no
 // key there and must not enter the set.
-const unixTargets = targets.filter((t) => t.os !== 'win32')
+const unixTargets = unixTargetTriples(targets)
 
-const binaries: { target: Target; sri: string }[] = []
-for (const t of unixTargets) {
-  const p = `release-assets/binaries/comment-checker-${t.target}`
-  let bytes: Uint8Array
-  try {
-    bytes = await Deno.readFile(p)
-  } catch {
-    throw new Error(`sync-flake-hashes: missing binary for ${t.target} at ${p} — create-github-release.ts must have run first`)
-  }
-  binaries.push({ target: t, sri: await sha256Sri(bytes) })
-}
+const binaries = await Promise.all(
+  unixTargets.map(async (target) => {
+    const p = `release-assets/binaries/comment-checker-${target}`
+    let bytes: Uint8Array
+    try {
+      bytes = await Deno.readFile(p)
+    } catch {
+      throw new Error(
+        `sync-flake-hashes: missing binary for ${target} at ${p} — create-github-release.ts must have run first`,
+      )
+    }
+    return { target, sri: await sha256Sri(bytes) }
+  }),
+)
 
-const nextSrIs = new Map(binaries.map((b) => [b.target.target, b.sri]))
+const nextSrIs = new Map(binaries.map((b) => [b.target, b.sri]))
 const flakeText = await Deno.readTextFile(FLAKE)
 const rewritten = rewriteFlakeHashes(flakeText, nextSrIs)
 const changed = rewritten !== flakeText
@@ -85,7 +89,7 @@ const dryRun = Deno.env.get('DRY_RUN') === '1'
 if (dryRun) {
   console.log(`sync-flake-hashes [dry-run]: would open ${branch} updating flake.nix to v${version}`)
   for (const b of binaries) {
-    console.log(`  ${b.target.target} -> ${b.sri}`)
+    console.log(`  ${b.target} -> ${b.sri}`)
   }
   Deno.exit(0)
 }
@@ -96,8 +100,8 @@ await Deno.writeTextFile(FLAKE, rewritten)
 // trust the version field alone; re-read the file and compare).
 const after = await Deno.readTextFile(FLAKE)
 for (const b of binaries) {
-  if (!after.includes(`"${b.target.target}" = "${b.sri}"`)) {
-    throw new Error(`sync-flake-hashes: hash rewrite did not round-trip for ${b.target.target}`)
+  if (!after.includes(`"${b.target}" = "${b.sri}"`)) {
+    throw new Error(`sync-flake-hashes: hash rewrite did not round-trip for ${b.target}`)
   }
 }
 
@@ -113,7 +117,10 @@ const prBody =
   'Nix fixed-output derivations cache by name + declared hash, so the version-string bump alone never invalidates ' +
   'the fetched bytes; these hashes are what make `nix build .#comment-checker` serve the binary this release published.'
 
-await exec('gh', [
+// Bound the broken-window: from tag creation until this PR merges, a fresh
+// nix build of master fails (declared version + old hashes). Auto-merge lands
+// it as soon as CI passes when branch protection permits bot auto-merge.
+const prNumber = (await exec('gh', [
   'pr',
   'create',
   '--base',
@@ -124,24 +131,13 @@ await exec('gh', [
   `fix(flake): sync v${version} release asset hashes`,
   '--body',
   prBody,
-])
-console.log(`sync-flake-hashes: opened PR for ${branch}`)
-
-// Bound the broken-window: from tag creation until this PR merges, a fresh
-// nix build of master fails (declared version + old hashes). Auto-merge lands
-// it as soon as CI passes when branch protection permits bot auto-merge.
-const prNumber = await exec('gh', [
-  'pr',
-  'list',
-  '--head',
-  branch,
-  '--state',
-  'open',
   '--json',
   'number',
   '--jq',
-  '.[0].number // empty',
-])
+  '.number',
+])).trim()
+console.log(`sync-flake-hashes: opened PR for ${branch} (${prNumber})`)
+
 if (prNumber) {
   await exec('gh', ['pr', 'merge', '--auto', '--squash', prNumber], true)
 }

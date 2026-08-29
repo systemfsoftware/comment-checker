@@ -57,10 +57,19 @@ if (flaggedRc !== 2) {
   Deno.exit(1)
 }
 
-const workspaceManifest = parseToml(await Deno.readTextFile('Cargo.toml'))
-const expectedVersion = workspaceManifest.workspace.package.version as string
-const versionProc = new Deno.Command(binPath, { args: ['--version'], stdout: 'piped', stderr: 'piped' })
-  .outputSync()
+const workspaceManifest = parseToml(await Deno.readTextFile('Cargo.toml')) as {
+  workspace: { package: { version: string } }
+}
+const expectedVersion = workspaceManifest.workspace.package.version
+if (!/^\d+\.\d+\.\d+$/.test(expectedVersion)) {
+  console.error(`workspace Cargo.toml version '${expectedVersion}' is not a semver`)
+  Deno.exit(1)
+}
+const versionProc = await new Deno.Command(binPath, {
+  args: ['--version'],
+  stdout: 'piped',
+  stderr: 'piped',
+}).output()
 const versionLine = new TextDecoder().decode(versionProc.stdout).trim()
 const versionMatch = /claude-code-comment-checker\s+(\d+\.\d+\.\d+)/.exec(versionLine)
 if (!versionMatch || versionMatch[1] !== expectedVersion) {

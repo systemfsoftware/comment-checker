@@ -1,5 +1,6 @@
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process'
 import { Crypto, Effect, FileSystem, Schema } from 'effect'
+import { sriFromSha256, type Target, TARGETS_PATH, unixTargetTriples } from './shared.ts'
 import {
   CRATES_DIR,
   extractJsonVersion,
@@ -115,13 +116,23 @@ export const checkAllSurfaces = () =>
     return { expected, workspaceVersion, pluginChecked, flakeHashes: flakeHash }
   })
 
-export class FlakeHashMismatch extends Schema.TaggedError<FlakeHashMismatch>()('FlakeHashMismatch', {
-  version: Semver,
-  stale: Schema.Array(Schema.String),
-}) {
+export class FlakeHashMismatch
+  extends Schema.TaggedError<FlakeHashMismatch>()('FlakeHashMismatch', {
+    version: Semver,
+    stale: Schema.Array(
+      Schema.Struct({
+        triple: Schema.String,
+        reason: Schema.Union([Schema.Literal('mismatch'), Schema.Literal('download-failed')]),
+      }),
+    ),
+  }) {
   override get message(): string {
     return this.stale
-      .map((t) => `check-versions: flake.nix hash for ${t} does not match the v${this.version} release asset`)
+      .map((s) =>
+        s.reason === 'download-failed'
+          ? `check-versions: could not download the v${this.version} release asset for ${s.triple}`
+          : `check-versions: flake.nix hash for ${s.triple} does not match the v${this.version} release asset`
+      )
       .join('\n')
   }
 }
@@ -135,25 +146,18 @@ export class FlakeTagMissing extends Schema.TaggedError<FlakeTagMissing>()('Flak
   }
 }
 
-export class FlakeRemoteUnreachable extends Schema.TaggedError<FlakeRemoteUnreachable>()('FlakeRemoteUnreachable', {}) {
+export class FlakeRemoteUnreachable
+  extends Schema.TaggedError<FlakeRemoteUnreachable>()('FlakeRemoteUnreachable', {}) {
   override get message(): string {
     return 'check-versions: could not list release tags from origin — the flake hash gate cannot verify the declared version'
   }
 }
 
-const FLAKE_TARGET_TRIPLES = [
-  'x86_64-unknown-linux-gnu',
-  'aarch64-unknown-linux-gnu',
-  'x86_64-apple-darwin',
-  'aarch64-apple-darwin',
-] as const
-
 const sriOfDigest = (bytes: Uint8Array) =>
   Effect.gen(function* () {
     const crypto = yield* Crypto.Crypto
     const digest = yield* crypto.digest('SHA-256', bytes)
-    const raw = Array.from(new Uint8Array(digest))
-    return `sha256-${btoa(String.fromCharCode(...raw))}`
+    return sriFromSha256(new Uint8Array(digest))
   })
 
 const remoteReleaseTags = Effect.gen(function* () {
@@ -164,9 +168,11 @@ const remoteReleaseTags = Effect.gen(function* () {
     return yield* new FlakeRemoteUnreachable()
   }
   const text = yield* spawner.string(lsRemote)
-  return [...new Set(
-    [...text.matchAll(/refs\/tags\/v(\d+\.\d+\.\d+)(\^\{\})?$/gm)].map((m) => m[1]),
-  )]
+  return [
+    ...new Set(
+      [...text.matchAll(/refs\/tags\/v(\d+\.\d+\.\d+)(\^\{\})?$/gm)].map((m) => m[1]),
+    ),
+  ]
 })
 
 const newerThan = (a: string, b: string): boolean => {
@@ -191,42 +197,45 @@ export const checkFlakeHashes = () =>
     const tagExists = releaseTags.includes(declared)
 
     if (!tagExists) {
-      const newest = releaseTags.slice().sort((a, b) => olderThan(a, b) ? -1 : 1).at(-1)
+      const newest = releaseTags.slice().sort((a, b) => newerThan(a, b) ? 1 : -1).at(-1)
       if (newest === undefined || newerThan(declared, newest)) {
         return { stale: [], skipped: `tag ${tag} absent (version bump in flight)` }
       }
-      return yield* new FlakeTagMissing({ declared, newest: newest ?? 'none' })
+      return yield* new FlakeTagMissing({ declared, newest })
     }
 
-    const stale: string[] = []
-    for (const triple of FLAKE_TARGET_TRIPLES) {
-      const assetName = `comment-checker-${triple}`
-      const dir = yield* fs.makeTempDirectory()
-      const code = yield* spawner.exitCode(
-        ChildProcess.make('gh', [
-          'release',
-          'download',
-          tag,
-          '--pattern',
-          assetName,
-          '--dir',
-          dir,
-          '--clobber',
-        ]),
-      )
-      if (code !== 0) {
-        stale.push(`${triple} (download failed)`)
-        yield* fs.remove(dir, { recursive: true })
-        continue
-      }
-      const bytes = yield* fs.readFile(`${dir}/${assetName}`)
-      const sri = yield* sriOfDigest(bytes)
-      yield* fs.remove(dir, { recursive: true })
-      if (!flakeText.includes(`"${triple}" = "${sri}"`)) {
-        stale.push(triple)
-      }
-    }
-    return { stale, skipped: null }
+    const targetsText = yield* fs.readFileString(TARGETS_PATH)
+    const triples = unixTargetTriples(JSON.parse(targetsText) as Target[])
+    const results = yield* Effect.acquireRelease(
+      fs.makeTempDirectory(),
+      (dir) => fs.remove(dir, { recursive: true }).pipe(Effect.orDie),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.forEach(triples, (triple) =>
+          Effect.gen(function* () {
+            const assetName = `comment-checker-${triple}`
+            const code = yield* spawner.exitCode(
+              ChildProcess.make('gh', [
+                'release',
+                'download',
+                tag,
+                '--pattern',
+                assetName,
+                '--dir',
+                dir,
+                '--clobber',
+              ]),
+            )
+            if (code !== 0) {
+              return { triple, reason: 'download-failed' as const }
+            }
+            const bytes = yield* fs.readFile(`${dir}/${assetName}`)
+            const sri = yield* sriOfDigest(bytes)
+            return flakeText.includes(`"${triple}" = "${sri}"`)
+              ? null
+              : { triple, reason: 'mismatch' as const }
+          }), { concurrency: 4 })
+      ),
+    )
+    return { stale: results.filter((r) => r !== null), skipped: null }
   })
-
-const olderThan = (a: string, b: string): boolean => newerThan(b, a)
