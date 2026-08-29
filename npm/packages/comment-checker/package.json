@@ -23,9 +23,9 @@
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "devDependencies": {
-    "@effect/platform-node": "4.0.0-rc.108",
+    "@effect/platform-node": "4.0.0-rc.112",
     "@types/node": "latest",
-    "effect": "4.0.0-rc.108",
+    "effect": "4.0.0-rc.112",
     "oxlint": "latest",
     "tsdown": "latest",
     "typescript": "latest"
