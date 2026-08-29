@@ -1,0 +1,16 @@
+{
+  "name": "comment-checker-marketplace",
+  "owner": {
+    "name": "systemfsoftware"
+  },
+  "metadata": {
+    "description": "Comment Checker marketplace — PostToolUse hook that flags unnecessary comments."
+  },
+  "plugins": [
+    {
+      "name": "comment-checker",
+      "description": "PostToolUse hook that flags unnecessary comments. Runs comment-checker --strip, then direnv exec if it is missing.",
+      "source": "./"
+    }
+  ]
+}
