@@ -35,6 +35,6 @@ When comments are flagged it writes the report, with per-comment reasons, to std
 
 ## Docs
 
-- Full documentation: comments flagged, comments spared, languages, plus `--prompt` and `--strip` — [the project README](https://github.com/systemfsoftware/comment-checker/blob/master/README.md)
+- Setup and repair: the `comment-checker-setup` skill (`.claude/skills/comment-checker-setup/`) — run its `scripts/doctor.ts` to verify resolution, identity, the exit-code contract, hook wiring, and the direnv bridge end-to-end
 - License: [Apache-2.0](https://github.com/systemfsoftware/comment-checker/blob/master/LICENSE)
 - Development and contributing: [AGENTS.md](https://github.com/systemfsoftware/comment-checker/blob/master/AGENTS.md)
