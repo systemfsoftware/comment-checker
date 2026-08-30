@@ -1,6 +1,6 @@
 {
   "name": "comment-checker",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "PostToolUse hook that flags unnecessary comments. Runs comment-checker, then direnv exec if it is missing. Names flake.nix when that is why it is missing.",
   "author": {
     "name": "systemfsoftware",

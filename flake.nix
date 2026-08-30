@@ -21,7 +21,7 @@
                 overlays = [ (import rust-overlay) ];
               };
             in f pkgs);
-      version = "0.3.3";
+      version = "0.3.4";
       # Source build: no fetchurl of the released *binary*, so no binary hash
       # to go stale (that fixed-output caching was the #81 failure).
       #
