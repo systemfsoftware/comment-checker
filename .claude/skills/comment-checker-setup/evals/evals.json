@@ -38,7 +38,7 @@
     "needles": [
       "W3",
       "direnv allow",
-      "comment-checker on PATH"
+      "direnv exec . command -v comment-checker"
     ]
   },
   {
