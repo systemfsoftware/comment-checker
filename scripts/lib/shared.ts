@@ -30,3 +30,10 @@ export interface LauncherManifest {
   repository: { type: string; url: string }
   optionalDependencies?: Record<string, string>
 }
+/** SRI encoding of a SHA-256 digest (Nix `fetchurl` hash format). */
+export const sriFromSha256 = (digest: Uint8Array): string =>
+  `sha256-${btoa(String.fromCharCode(...digest))}`
+
+/** Flake hash-block keys: every target except the win32 row in targets.json. */
+export const unixTargetTriples = (targets: Target[]): string[] =>
+  targets.filter((t) => t.os !== 'win32').map((t) => t.target)

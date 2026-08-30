@@ -31,10 +31,10 @@
             "aarch64-darwin" = "aarch64-apple-darwin";
           }.${pkgs.system} or (throw "unsupported system ${pkgs.system}");
           hash = {
-            "x86_64-unknown-linux-gnu" = "sha256-d/Xl2VZqnB+lFNkdtglY7N/nY6CxhgQG+arGL7FmCME=";
-            "aarch64-unknown-linux-gnu" = "sha256-vP0Ss8eOOElpCrxryGiMn0WMBIEDtJe3LnB8FunZjok=";
-            "x86_64-apple-darwin" = "sha256-c0mJOCcz0Zt61Da/y/n3JTFGchWJQk8cBZ8EMVYx7e8=";
-            "aarch64-apple-darwin" = "sha256-C/f81qw86DXoZ6dL2rEt6z67IfYw09hG8iaa0vQOu2U=";
+            "x86_64-unknown-linux-gnu" = "sha256-ZWq3FcS8ILUCVNrC8u4jHCltywXNNuZAluF8IOK5BnI=";
+            "aarch64-unknown-linux-gnu" = "sha256-NxMnMpTcXQ/A1D2cZRbXDfYJEL+bqqJQphwWM3YZ7+M=";
+            "x86_64-apple-darwin" = "sha256-8RGZ/X6hFJe0sEHnD0OCJ7BF1iQX6DrGt0qAwYs78ho=";
+            "aarch64-apple-darwin" = "sha256-R62Dc6QVr64K5N/HPIDkfG6hXx9JUy/o43451wzpbNw=";
           }.${target};
           src = pkgs.fetchurl {
             url = "https://github.com/systemfsoftware/comment-checker/releases/download/v${version}/comment-checker-${target}";
