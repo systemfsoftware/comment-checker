@@ -97,8 +97,17 @@ A manifest not on the list is intentionally outside the gate: keeping a file
 off the surface means its version can never drift out of step, and adding a
 manifest to it is a deliberate decision, not a default.
 
+## Hook gate
+
+### Silent pass
+A verification mechanism (a hook, a gate, a check) exits success while checking nothing — the failure mode of going green. Distinct from a false negative, which is a wrong verdict on a real check; a silent pass means the check never ran, the input never reached it, or its failure was swallowed. A hook must never claim a check that did not happen: absent checker exits with guidance, a flagged write exits with the report, and no surface ends in a blanket success.
+*Avoid:* fail-open (reserved for the classifier's deliberate spare)
+
 ## Flagged ambiguities
 
 - "context" had been used for both the language (scope/position) and the
   evidence (adjacent code) — these are distinct; adjacent syntax is the
   only context that carries the mention.
+- "fail open" in the classifier spares a comment it cannot judge (a deliberate
+  conservative verdict) while "silent pass" in the hook gate exits green while
+  checking nothing (a defect) — distinct meanings, distinct domains.

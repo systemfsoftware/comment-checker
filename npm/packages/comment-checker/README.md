@@ -106,23 +106,13 @@ comment-checker --prompt "Formatting Guidelines Violation:\n\n{{comments}}\n\nPl
 
 Pass `--strip` to delete flagged whole-line comments directly from the target file on disk when invoked:
 
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "comment-checker --strip"
-          }
-        ]
-      }
-    ]
-  }
-}
+```bash
+comment-checker --strip <<'JSON'
+{"tool_name":"Write","tool_input":{"file_path":"src/client.py","content":"def load(path):\n    # parse the config file\n    return open(path).read()\n"}}
+JSON
 ```
+
+The hook itself runs check mode and never modifies your files.
 
 ## Troubleshooting
 

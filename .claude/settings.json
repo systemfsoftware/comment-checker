@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "command -v comment-checker >/dev/null 2>&1 && exec comment-checker || { command -v direnv >/dev/null 2>&1 && exec direnv exec \"${PWD:-.}\" comment-checker; } || exit 0"
+            "command": "command -v comment-checker >/dev/null 2>&1 && exec comment-checker\ncommand -v direnv >/dev/null 2>&1 && exec direnv exec \"${PWD:-.}\" comment-checker\necho \"comment-checker did not run — nothing checked this write.\" >&2\nexit 1"
           }
         ]
       }
