@@ -52,3 +52,7 @@
 ## 0.3.3
 
   - Build the CLI binary directly from source in the Nix flake instead of fetching release assets, ensuring environments using Nix or direnv run the matching version with full command support.
+
+## 0.3.4
+
+  - The hook no longer crashes on startup in some environments and silently skips every write, and it no longer needs write access to your files — it flags unnecessary comments read-only and reports them to the model.
