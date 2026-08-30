@@ -6,7 +6,7 @@ fn repo_root() -> PathBuf {
 }
 
 #[test]
-fn plugin_hook_registers_post_tool_use_with_strip_launcher() {
+fn plugin_hook_registers_post_tool_use_with_launcher() {
     let hooks = fs::read_to_string(repo_root().join("hooks/hooks.json")).unwrap();
     assert!(
         hooks.contains("\"PostToolUse\""),
@@ -20,18 +20,22 @@ fn plugin_hook_registers_post_tool_use_with_strip_launcher() {
         hooks.contains("run.ts"),
         "plugin hook must invoke the launcher"
     );
+    assert!(
+        !hooks.contains("--strip"),
+        "plugin hook must run check mode, not strip"
+    );
 }
 
 #[test]
-fn project_hook_registers_post_tool_use_without_swallow() {
+fn project_hook_registers_post_tool_use_without_strip_or_swallow() {
     let settings = fs::read_to_string(repo_root().join(".claude/settings.json")).unwrap();
     assert!(
         settings.contains("\"PostToolUse\""),
         "project hook must run on PostToolUse"
     );
     assert!(
-        settings.contains("--strip"),
-        "project hook must auto-strip flagged comments"
+        !settings.contains("--strip"),
+        "project hook must run check mode, not strip"
     );
     assert!(
         !settings.contains("|| exit 0"),
@@ -40,11 +44,11 @@ fn project_hook_registers_post_tool_use_without_swallow() {
 }
 
 #[test]
-fn launcher_runs_checker_in_strip_mode() {
+fn launcher_runs_checker_in_check_mode() {
     let run_ts = fs::read_to_string(repo_root().join("hooks/run.ts")).unwrap();
     assert!(
-        run_ts.contains("'--strip'"),
-        "launcher must invoke the checker with --strip"
+        !run_ts.contains("--strip"),
+        "launcher must invoke the checker in check mode, not strip"
     );
     assert!(
         run_ts.contains("NotCapable"),
