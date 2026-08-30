@@ -21,10 +21,18 @@ if (env instanceof type.errors) {
   Deno.exit(1)
 }
 
+function spawnEnv(): Record<string, string> {
+  return {
+    PATH: Deno.env.get('PATH') ?? '',
+    HOME: Deno.env.get('HOME') ?? '',
+  }
+}
+
 async function run(cmd: string, args: string[]): Promise<number | undefined> {
   try {
     const { code } = await new Deno.Command(cmd, {
       args,
+      env: spawnEnv(),
       stdin: 'inherit',
       stdout: 'inherit',
       stderr: 'inherit',
@@ -32,30 +40,25 @@ async function run(cmd: string, args: string[]): Promise<number | undefined> {
     return code
   } catch (error) {
     if (error instanceof Deno.errors.NotFound) return undefined
-    throw error
+    if (error instanceof Deno.errors.NotCapable) return undefined
+    return undefined
   }
 }
 
-const strip = ['--strip']
 const projectDir = env.CLAUDE_PROJECT_DIR
 
-const fromPath = await run('comment-checker', strip)
+const fromPath = await run('comment-checker', [])
 if (fromPath !== undefined) Deno.exit(fromPath)
 
-const fromDirenv = await run('direnv', ['exec', projectDir, 'comment-checker', ...strip])
+const fromDirenv = await run('direnv', ['exec', projectDir, 'comment-checker'])
 if (fromDirenv !== undefined) Deno.exit(fromDirenv)
 
 const flake = await exists(join(projectDir, 'flake.nix'))
+const hint = flake
+  ? 'This project has flake.nix. Run direnv allow or nix develop so comment-checker is on PATH (the flake wraps it in bwrap).'
+  : 'Install it: pnpm add -g @systemfsoftware/claude-code-comment-checker'
 await writeAll(
   Deno.stderr,
-  new TextEncoder().encode(
-    [
-      'comment-checker did not run, so nothing checked this write.',
-      flake
-        ? 'This project has flake.nix. Run direnv allow or nix develop so comment-checker is on PATH (the flake wraps it in bwrap).'
-        : 'Install it: pnpm add -g @systemfsoftware/claude-code-comment-checker',
-      '',
-    ].join('\n'),
-  ),
+  new TextEncoder().encode(`${hint}\ncomment-checker did not run — nothing checked this write.\n`),
 )
 Deno.exit(1)
