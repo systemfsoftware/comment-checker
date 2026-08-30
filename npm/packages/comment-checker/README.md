@@ -107,7 +107,9 @@ comment-checker --prompt "Formatting Guidelines Violation:\n\n{{comments}}\n\nPl
 Pass `--strip` to delete flagged whole-line comments directly from the target file on disk when invoked:
 
 ```bash
-comment-checker --strip < file.py
+comment-checker --strip <<'JSON'
+{"tool_name":"Write","tool_input":{"file_path":"src/client.py","content":"def load(path):\n    # parse the config file\n    return open(path).read()\n"}}
+JSON
 ```
 
 The hook itself runs check mode and never modifies your files.
@@ -119,9 +121,6 @@ Ensure your global npm/pnpm/yarn binary directory is included in your system `$P
 - pnpm: `pnpm bin -g`
 - npm: `npm bin -g`
 - yarn: `yarn global bin`
-
-### `could not write <file>: Read-only file system (os error 30)` and nothing is stripped
-The hook strips by rewriting the file on disk, so its process needs write access to every file it checks. On a read-only mount, remount it read-write (`mount -o remount,rw <mountpoint>`) or use a writable checkout; on a permission error, fix the file's ownership or permissions. When the strip cannot write the file, the hook fails loudly with exit code `2` and a report naming the file — it never silently skips.
 
 ### Verification via Doctor Tool
 For repository setup diagnosis (PATH resolution, direnv fallbacks, binary identity verification), review the [comment-checker-setup skill](https://github.com/systemfsoftware/comment-checker/blob/master/.claude/skills/comment-checker-setup/SKILL.md) and execute its diagnostic script:

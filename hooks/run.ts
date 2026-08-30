@@ -21,26 +21,20 @@ if (env instanceof type.errors) {
   Deno.exit(1)
 }
 
-function spawnEnv(): Record<string, string> {
-  return {
-    PATH: Deno.env.get('PATH') ?? '',
-    HOME: Deno.env.get('HOME') ?? '',
-  }
-}
-
+// Any spawn failure — NotFound, NotCapable (the hook host scrubs
+// Deno-sensitive env vars before launching this script), or anything else —
+// means "binary unavailable": the fallback chain decides, never an uncaught
+// error that would break the write the hook is gating.
 async function run(cmd: string, args: string[]): Promise<number | undefined> {
   try {
     const { code } = await new Deno.Command(cmd, {
       args,
-      env: spawnEnv(),
       stdin: 'inherit',
       stdout: 'inherit',
       stderr: 'inherit',
     }).output()
     return code
-  } catch (error) {
-    if (error instanceof Deno.errors.NotFound) return undefined
-    if (error instanceof Deno.errors.NotCapable) return undefined
+  } catch {
     return undefined
   }
 }
@@ -51,7 +45,23 @@ const fromPath = await run('comment-checker', [])
 if (fromPath !== undefined) Deno.exit(fromPath)
 
 const fromDirenv = await run('direnv', ['exec', projectDir, 'comment-checker'])
-if (fromDirenv !== undefined) Deno.exit(fromDirenv)
+if (fromDirenv !== undefined) {
+  // direnv ran but produced no verdict (0 = clean, 2 = flagged): either it
+  // could not find the checker or it failed for its own reasons. Keep the
+  // gate non-zero and make sure the "nothing checked" guidance still lands
+  // instead of direnv's raw error being the only message.
+  if (fromDirenv !== 0 && fromDirenv !== 2) {
+    const flakeDirs = await exists(join(projectDir, 'flake.nix'))
+    const guid = flakeDirs
+      ? 'This project has flake.nix. Run direnv allow or nix develop so comment-checker is on PATH (the flake wraps it in bwrap).'
+      : 'Install it: pnpm add -g @systemfsoftware/claude-code-comment-checker'
+    await writeAll(
+      Deno.stderr,
+      new TextEncoder().encode(`${guid}\ncomment-checker did not run — nothing checked this write.\n`),
+    )
+  }
+  Deno.exit(fromDirenv)
+}
 
 const flake = await exists(join(projectDir, 'flake.nix'))
 const hint = flake

@@ -3,11 +3,11 @@
     {
       "matcher": "Write|Edit|MultiEdit",
       "hooks": [
-                  {
-            "type": "command",
-            "command": "env -u LD_PRELOAD -u LD_LIBRARY_PATH -u LD_DEBUG -u LD_AUDIT -u LD_FOR_BUILD -u DYLD_INSERT_LIBRARIES -u DYLD_LIBRARY_PATH -u DYLD_FORCE_FLAT_NAMESPACE deno run --config \"${CLAUDE_PLUGIN_ROOT}/hooks/deno.jsonc\" --allow-read --allow-run=comment-checker,direnv --allow-env=CLAUDE_PROJECT_DIR,PATH,HOME \"${CLAUDE_PLUGIN_ROOT}/hooks/run.ts\"",
-            "timeout": 30
-          }
+        {
+          "type": "command",
+          "command": "env $(env | awk -F= '$1 ~ /^(LD_|DYLD_)/ { printf \"-u %s \", $1 }') deno run --config \"${CLAUDE_PLUGIN_ROOT}/hooks/deno.jsonc\" --allow-read --allow-run=comment-checker,direnv --allow-env=CLAUDE_PROJECT_DIR,PATH,HOME \"${CLAUDE_PLUGIN_ROOT}/hooks/run.ts\"",
+          "timeout": 30
+        }
       ]
     }
   ]

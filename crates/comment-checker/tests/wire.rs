@@ -24,6 +24,10 @@ fn plugin_hook_registers_post_tool_use_with_launcher() {
         !hooks.contains("--strip"),
         "plugin hook must run check mode, not strip"
     );
+    assert!(
+        hooks.contains("awk"),
+        "plugin hook must scrub the whole LD_*/DYLD_* env class, not a finite list"
+    );
 }
 
 #[test]
@@ -41,6 +45,10 @@ fn project_hook_registers_post_tool_use_without_strip_or_swallow() {
         !settings.contains("|| exit 0"),
         "project hook must never swallow failures silently"
     );
+    assert!(
+        settings.contains("bwrap"),
+        "settings flake hint must match the launcher guidance"
+    );
 }
 
 #[test]
@@ -51,7 +59,7 @@ fn launcher_runs_checker_in_check_mode() {
         "launcher must invoke the checker in check mode, not strip"
     );
     assert!(
-        run_ts.contains("NotCapable"),
-        "launcher must treat spawn denials as binary-unavailable"
+        run_ts.contains("} catch {") && !run_ts.contains("throw error"),
+        "launcher must absorb every spawn failure instead of rethrowing"
     );
 }
