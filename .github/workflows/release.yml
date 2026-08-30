@@ -115,7 +115,6 @@ jobs:
     permissions:
       contents: write
       id-token: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -164,10 +163,5 @@ jobs:
 
       - name: Create GitHub release with binaries and changelog
         run: ./scripts/tools/create-github-release.ts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Sync flake.nix release asset hashes
-        run: ./scripts/tools/sync-flake-hashes.ts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

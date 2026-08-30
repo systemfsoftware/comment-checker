@@ -2,7 +2,7 @@
 title: flake.nix release-asset hashes froze at the v0.1.5 era, so nix builds served the 0.1.0 binary under the 0.3.2 name
 date: 2026-08-29
 category: integration-issues
-module: flake.nix fetchurl hash block + release pipeline (release-version.ts, check-versions.ts, sync-flake-hashes.ts)
+module: flake.nix fetchurl hash block + release pipeline (release-version.ts, check-versions.ts)
 problem_type: integration_issue
 component: distribution
 root_cause: config_error
@@ -17,6 +17,10 @@ tags: [flake, nix, fixed-output-derivation, fetchurl, sri, release-assets, hash-
 ---
 
 # Nix FOD hash drift served a stale binary under a current version name
+
+> This doc records the #81 failure analysis. The fetchurl-based remedy below was
+> replaced on 2026-08-30 by the in-flake source build (`rustPlatform.buildRustPackage`),
+> which removes the hash block entirely — see "Current remedy" at the end.
 
 ## Problem
 
@@ -35,7 +39,7 @@ tags: [flake, nix, fixed-output-derivation, fetchurl, sri, release-assets, hash-
 - **Re-uploading or re-releasing.** The correct binary was already published; a new tag would churn the npm/cargo/flake version surface for zero behavioral gain.
 - **Relying on the rc-only smoke gate.** `run-binary-smoke.ts` asserted exit codes (clean 0, flagged 2) but never the version string — the 0.1.0-era binaries passed it exactly because it never checked what they were.
 
-## Solution
+## Solution (historical — superseded 2026-08-30)
 
 Four changes on branch gh-81 (pending PR):
 
@@ -44,18 +48,21 @@ Four changes on branch gh-81 (pending PR):
 3. **Recomputing gate** (`scripts/lib/version-files.ts` + `check-versions.ts`): for the tag the flake declares, downloads each asset via `gh release download` (2 retries with fail-closed outcome), recomputes the SRI, and fails with `FlakeHashMismatch` naming the stale triple. Absent tags skip only when the declared version is newer than every published release, else `FlakeTagMissing`; an unreachable remote is `FlakeRemoteUnreachable` — never a silent skip. All services (`ChildProcessSpawner`, `Crypto`, `FileSystem`) are Effect services yielded in-effect via `DenoServices.layer`.
 4. **Version assertion in the smoke gate** (`scripts/tools/run-binary-smoke.ts`): parses `--version` output and requires it to equal the workspace `Cargo.toml` version, with a strict semver guard.
 
-Shared helpers live in `scripts/lib/shared.ts`: `sriFromSha256` (SRI encoding) and `unixTargetTriples` (the flake block's four keys, derived from `targets.json` excluding win32) — one source of truth consumed by both sync and gate.
+Shared helpers lived in `scripts/lib/shared.ts`: `sriFromSha256` (SRI encoding) and `unixTargetTriples` (the flake block's four keys, derived from `targets.json` excluding win32). These were removed with the machinery.
 
-## Why This Works
+## Why This Works (historical)
 
-Nix keys a fixed-output derivation on name + declared output hash. When the declared hash matches the published bytes, the FOD fetches the correct asset; when it doesn't, warm stores replay whatever bytes the stale hash previously certified. The fix makes the declared hash *be* the live asset hash (U1), makes publishing write the hashes automatically (U2), makes CI recompute and compare them from the live release (U3), and makes the smoke gate assert the binary's own identity (U4). The gate never trusts `version =` alone — it recomputes from fetched bytes (CHK1 discipline: a self-reported field certifies nothing).
+Nix keys a fixed-output derivation on name + declared output hash. When the declared hash matches the published bytes, the FOD fetches the correct asset; when it doesn't, warm stores replay whatever bytes the stale hash previously certified. The fix made the declared hash *be* the live asset hash (U1), made publishing write the hashes automatically (U2), made CI recompute and compare them from the live release (U3), and made the smoke gate assert the binary's own identity (U4). The gate never trusted `version =` alone — it recomputes from fetched bytes (CHK1 discipline: a self-reported field certifies nothing).
+
+## Current remedy (2026-08-30)
+
+The root fix removes the fetch entirely. `flake.nix` now builds the binary from the repo's own source via `rustPlatform.buildRustPackage` (`doCheck = false`; the crate's tests run in CI, not in the derivation). A source build has no fixed-output derivation and no hash block, so the #81 failure class cannot recur by construction — there is no hash to go stale, and the devshell serves the current tree. The `version` binding remains (the version-sync surface still bumps it), and CI now runs `nix flake check` as the shipped flake-evaluation gate. The fetchurl-era machinery — `sync-flake-hashes.ts`, the release.yml hash-sync step, `checkFlakeHashes`, and the `sriFromSha256`/`unixTargetTriples` helpers — was deleted.
 
 ## Prevention
 
-- Never let release automation bump only the `version` string inside a flake: the hash block is an output of the release, not a constant. Sync it in the publish phase and verify with a recomputing gate.
-- Any gate that stands in for a real invariant (here: "the nix build serves the version it claims") must exercise the same assets and inputs the real consumer uses — the gate downloads the same `comment-checker-<triple>` assets for the same `v<version>` tag the flake fetches.
-- A smoke gate for a released binary asserts identity, not just exit codes — assert `--version` against a single source of truth (the workspace manifest).
-- Remote-unreachable and absent-tag states must fail loudly, not skip: a gate that silently skips on its own infrastructure failing is a permanent blind spot in exactly the broken-pipeline state it exists to catch.
+- A fixed-output derivation with a hand-pinned hash is a permanent maintenance liability: the hash is an output of the release, not a constant. Prefer building from source when the flake's own repo is the release source, so there is no hash to sync.
+- A smoke gate for a released binary asserts identity, not just exit codes — assert `--version` against a single source of truth (the workspace manifest). This lesson survived the removal: `run-binary-smoke.ts` still asserts the version.
+- Any gate that stands in for a real invariant must not skip silently on its own infrastructure failing.
 
 ## Related Issues
 
