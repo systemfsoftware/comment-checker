@@ -34,3 +34,31 @@ jobs:
     uses: ./.github/workflows/mutation.yml
     permissions:
       contents: read
+
+  nix:
+    name: nix flake check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: DeterminateSystems/nix-installer-action@e50d5f73bfe71c2dd0aa4218de8f4afa59f8f81d # v16
+        with:
+          extra-conf: |
+            access-tokens = github.com=${{ github.token }}
+      - name: Flake evaluates
+        run: nix flake check
+      - name: Attribute resolves
+        run: nix eval .#packages.x86_64-linux.comment-checker-bwrap
+      - name: Build the source-built binary
+        # nix flake check and nix eval only evaluate; the derivation must be
+        # built or a broken src filter / compile failure ships green (the
+        # eval-only gate is precisely how a dropped Cargo.toml slipped past).
+        run: nix build --no-link .#packages.x86_64-linux.comment-checker-bwrap
+      - name: Smoke the built binary version
+        # Smoke the unwrapped binary: the bwrap wrapper needs --unshare-net,
+        # which GitHub Actions containers do not permit.
+        run: |
+          v="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)"
+          nix shell .#comment-checker -c comment-checker --version | grep -qF "$v" \
+            || { echo "nix-built binary version mismatch (expected $v)" >&2; exit 1; }

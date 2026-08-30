@@ -25,6 +25,8 @@ No eager-read mandates: document reads are situational, triggered by the work, n
 - `README.md` — when working in a directory you have not worked in before.
 - `ARCHITECTURE.md` — when the task changes a module boundary or data flow.
 - Product/requirements docs — when a decision depends on product intent.
+- `docs/solutions/` — when implementing or debugging in an area with documented past solutions.
+- `CONCEPTS.md` — when orienting to shared domain vocabulary and definitions.
 
 ## Working Rules
 

@@ -22,31 +22,42 @@
               };
             in f pkgs);
       version = "0.3.2";
+      # Source build: no fetchurl of the released *binary*, so no binary hash
+      # to go stale (that fixed-output caching was the #81 failure).
+      #
+      # The toolchain pin is the repo's own: rust-toolchain.toml, from rust-overlay.
       mkCommentChecker = pkgs:
         let
-          target = {
-            "x86_64-linux" = "x86_64-unknown-linux-gnu";
-            "aarch64-linux" = "aarch64-unknown-linux-gnu";
-            "x86_64-darwin" = "x86_64-apple-darwin";
-            "aarch64-darwin" = "aarch64-apple-darwin";
-          }.${pkgs.system} or (throw "unsupported system ${pkgs.system}");
-          hash = {
-            "x86_64-unknown-linux-gnu" = "sha256-ZWq3FcS8ILUCVNrC8u4jHCltywXNNuZAluF8IOK5BnI=";
-            "aarch64-unknown-linux-gnu" = "sha256-NxMnMpTcXQ/A1D2cZRbXDfYJEL+bqqJQphwWM3YZ7+M=";
-            "x86_64-apple-darwin" = "sha256-8RGZ/X6hFJe0sEHnD0OCJ7BF1iQX6DrGt0qAwYs78ho=";
-            "aarch64-apple-darwin" = "sha256-R62Dc6QVr64K5N/HPIDkfG6hXx9JUy/o43451wzpbNw=";
-          }.${target};
-          src = pkgs.fetchurl {
-            url = "https://github.com/systemfsoftware/comment-checker/releases/download/v${version}/comment-checker-${target}";
-            inherit hash;
+          toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
+          rustPlatform = pkgs.makeRustPlatform { cargo = toolchain; rustc = toolchain; };
+          # tree-sitter-language-pack's build.rs downloads a parser-sources
+          # tarball at compile time; the nix sandbox has no network, so the
+          # bundle rides in as a hash-pinned fetchurl (like Cargo.lock —
+          # drift fails the build loudly). Keep the URL version equal to the
+          # tree-sitter-language-pack version in Cargo.lock, and the sha256
+          # equal to this tarball's real hash. TSLP_SOURCE_BUNDLE_URL also
+          # accepts file://, which is how the sandboxed build reads it.
+          tslpParserSources = pkgs.fetchurl {
+            url = "https://github.com/xberg-io/tree-sitter-language-pack/releases/download/v1.14.3/parser-sources-1.14.3.tar.zst";
+            sha256 = "f13bcf0be1b9a99c45ead43671ae311346c2a10807c3fdc7c76407445ea7f2c7";
           };
-        in pkgs.stdenv.mkDerivation {
+        in rustPlatform.buildRustPackage {
           pname = "comment-checker";
-          inherit version src;
-          dontUnpack = true;
-          installPhase = ''
-            install -Dm755 $src $out/bin/comment-checker
-          '';
+          inherit version;
+          src = nixpkgs.lib.cleanSourceWith {
+            src = ./.;
+            filter = path: type:
+              (type == "directory") ||
+              (builtins.elem (baseNameOf path) [ "Cargo.toml" "Cargo.lock" ]) ||
+              (builtins.match ".*/.cargo/.*" path != null) ||
+              (builtins.match ".*/crates/.*" path != null);
+          };
+          cargoLock.lockFile = ./Cargo.lock;
+          # The repo's quality gates (cargo test, mutation) run in CI, not in
+          # this derivation; doCheck defaults to true in buildRustPackage and
+          # would run the whole suite inside the nix sandbox.
+          doCheck = false;
+          TSLP_SOURCE_BUNDLE_URL = "file://${tslpParserSources}";
           meta = with pkgs.lib; {
             description = "Claude Code PostToolUse hook that flags unnecessary comments";
             homepage = "https://github.com/systemfsoftware/comment-checker";
