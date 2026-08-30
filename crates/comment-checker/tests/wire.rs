@@ -46,8 +46,8 @@ fn project_hook_registers_post_tool_use_without_strip_or_swallow() {
         "project hook must never swallow failures silently"
     );
     assert!(
-        settings.contains("bwrap"),
-        "settings flake hint must match the launcher guidance"
+        !settings.contains("pnpm add"),
+        "hook must not inject an install instruction into the model context"
     );
 }
 
@@ -61,5 +61,9 @@ fn launcher_runs_checker_in_check_mode() {
     assert!(
         run_ts.contains("} catch {") && !run_ts.contains("throw error"),
         "launcher must absorb every spawn failure instead of rethrowing"
+    );
+    assert!(
+        !run_ts.contains("pnpm add"),
+        "launcher must not inject an install instruction into the model context"
     );
 }

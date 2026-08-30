@@ -53,7 +53,7 @@ Deno denies the spawn itself when the process environment carries a sensitive va
 
 - Scrub env classes by prefix, never by name list; when the runtime's denial is prefix-based, the scrub must be too.
 - For a verification mechanism, pin the mechanism (catch-without-rethrow structure, exit-code contract), never a string that can live in a comment. A behavioral smoke (stub binaries on a temp PATH, sensitive var set, real payload piped) is stronger and needs only deno in CI.
-- Hooks must never claim a check that did not happen: absent checker -> exit 1 with install guidance, flagged comment -> exit 2 with report, and no `|| exit 0` anywhere in the surface.
+- Hooks must never claim a check that did not happen: absent checker -> exit 1 with a bare status line (stderr), flagged comment -> exit 2 with report, and no `|| exit 0` anywhere in the surface. A hook reports state; it never instructs the agent — no `pnpm add`, no "run direnv allow", nothing the model would act on from the hook's own text.
 
 ## Related Issues
 

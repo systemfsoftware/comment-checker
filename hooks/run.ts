@@ -1,8 +1,6 @@
 #!/usr/bin/env -S deno run --allow-read --allow-run=comment-checker,direnv --allow-env=CLAUDE_PROJECT_DIR,PATH,HOME
 
-import { exists } from '@std/fs/exists'
 import { writeAll } from '@std/io/write-all'
-import { join } from '@std/path'
 import { type } from 'arktype'
 
 const Env = type({
@@ -48,27 +46,18 @@ const fromDirenv = await run('direnv', ['exec', projectDir, 'comment-checker'])
 if (fromDirenv !== undefined) {
   // direnv ran but produced no verdict (0 = clean, 2 = flagged): either it
   // could not find the checker or it failed for its own reasons. Keep the
-  // gate non-zero and make sure the "nothing checked" guidance still lands
-  // instead of direnv's raw error being the only message.
+  // gate non-zero and report that the write was not checked.
   if (fromDirenv !== 0 && fromDirenv !== 2) {
-    const flakeDirs = await exists(join(projectDir, 'flake.nix'))
-    const guid = flakeDirs
-      ? 'This project has flake.nix. Run direnv allow or nix develop so comment-checker is on PATH (the flake wraps it in bwrap).'
-      : 'Install it: pnpm add -g @systemfsoftware/claude-code-comment-checker'
     await writeAll(
       Deno.stderr,
-      new TextEncoder().encode(`${guid}\ncomment-checker did not run — nothing checked this write.\n`),
+      new TextEncoder().encode('comment-checker did not run — nothing checked this write.\n'),
     )
   }
   Deno.exit(fromDirenv)
 }
 
-const flake = await exists(join(projectDir, 'flake.nix'))
-const hint = flake
-  ? 'This project has flake.nix. Run direnv allow or nix develop so comment-checker is on PATH (the flake wraps it in bwrap).'
-  : 'Install it: pnpm add -g @systemfsoftware/claude-code-comment-checker'
 await writeAll(
   Deno.stderr,
-  new TextEncoder().encode(`${hint}\ncomment-checker did not run — nothing checked this write.\n`),
+  new TextEncoder().encode('comment-checker did not run — nothing checked this write.\n'),
 )
 Deno.exit(1)
