@@ -11,6 +11,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
+    env:
+      # gh does not read GITHUB_TOKEN; check-versions.ts downloads release
+      # assets via the gh CLI and needs an explicit GH_TOKEN.
+      GH_TOKEN: ${{ github.token }}
     strategy:
       fail-fast: false
       matrix:
