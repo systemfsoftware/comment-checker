@@ -123,6 +123,7 @@ export class FlakeHashMismatch
       Schema.Struct({
         triple: Schema.String,
         reason: Schema.Union([Schema.Literal('mismatch'), Schema.Literal('download-failed')]),
+        detail: Schema.optional(Schema.String),
       }),
     ),
   }) {
@@ -130,7 +131,8 @@ export class FlakeHashMismatch
     return this.stale
       .map((s) =>
         s.reason === 'download-failed'
-          ? `check-versions: could not download the v${this.version} release asset for ${s.triple}`
+          ? `check-versions: could not download the v${this.version} release asset for ${s.triple}` +
+            (s.detail ? `: ${s.detail}` : '')
           : `check-versions: flake.nix hash for ${s.triple} does not match the v${this.version} release asset`
       )
       .join('\n')
@@ -209,42 +211,45 @@ export const checkFlakeHashes = () =>
 
     const targetsText = yield* fs.readFileString(TARGETS_PATH)
     const triples = unixTargetTriples(JSON.parse(targetsText) as Target[])
-    const results = yield* Effect.acquireRelease(
-      fs.makeTempDirectory(),
-      (dir) => fs.remove(dir, { recursive: true }).pipe(Effect.orDie),
-    ).pipe(
-      Effect.flatMap((dir) =>
-        Effect.forEach(triples, (triple) =>
-          Effect.gen(function* () {
-            const assetName = `comment-checker-${triple}`
-            const download = spawner.exitCode(
-              ChildProcess.make('gh', [
-                'release',
-                'download',
-                tag,
-                '--pattern',
-                assetName,
-                '--dir',
-                dir,
-                '--clobber',
-              ]),
-            ).pipe(
-              Effect.filterOrFail((c) => c === 0, () => 'download-failed' as const),
-              Effect.retry({ times: 2 }),
-              Effect.orElseSucceed(() => false),
-              Effect.map(() => true),
-            )
-            const ok = yield* download
-            if (!ok) {
-              return { triple, reason: 'download-failed' as const }
-            }
-            const bytes = yield* fs.readFile(`${dir}/${assetName}`)
-            const sri = yield* sriOfDigest(bytes)
-            return flakeText.includes(`"${triple}" = "${sri}"`)
-              ? null
-              : { triple, reason: 'mismatch' as const }
-          }), { concurrency: 4 })
-      ),
-    )
+    const results = yield* Effect.forEach(triples, (triple) =>
+      Effect.gen(function* () {
+        const assetName = `comment-checker-${triple}`
+        const dir = yield* Effect.acquireRelease(
+          fs.makeTempDirectory(),
+          (d) => fs.remove(d, { recursive: true }).pipe(Effect.orDie),
+        )
+        const gh = ChildProcess.make('gh', [
+          'release',
+          'download',
+          tag,
+          '--pattern',
+          assetName,
+          '--dir',
+          dir,
+          '--clobber',
+        ])
+        const attempt = Effect.gen(function* () {
+          const handle = yield* spawner.spawn(gh)
+          const stderr = yield* Stream.runCollect(Stream.decodeText(handle.stderr)).pipe(
+            Effect.map((chunks) => chunks.join('').trim()),
+          )
+          const code = yield* handle.exitCode
+          return { code, stderr }
+        })
+        let outcome = yield* attempt
+        for (let i = 0; i < 2 && outcome.code !== 0; i++) {
+          outcome = yield* attempt
+        }
+        // The file must exist even when gh reports success: a silent no-op
+        // download (rc 0, nothing written) must fail this gate, not pass it.
+        if (outcome.code !== 0 || !(yield* fs.exists(`${dir}/${assetName}`))) {
+          return { triple, reason: 'download-failed' as const, detail: outcome.stderr }
+        }
+        const bytes = yield* fs.readFile(`${dir}/${assetName}`)
+        const sri = yield* sriOfDigest(bytes)
+        return flakeText.includes(`"${triple}" = "${sri}"`)
+          ? null
+          : { triple, reason: 'mismatch' as const }
+      }), { concurrency: 4 })
     return { stale: results.filter((r) => r !== null), skipped: null }
   })
