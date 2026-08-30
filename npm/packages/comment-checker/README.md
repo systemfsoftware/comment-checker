@@ -1,25 +1,25 @@
 # @systemfsoftware/claude-code-comment-checker
 
-A Claude Code `PostToolUse` hook that flags unnecessary code comments and states the exact reason each one fails. A tree-sitter classifier over 37 languages, gated to F1 ≥ 0.85 on a 60-case corpus, it spares public API docs, directives, and non-obvious intent instead of flagging every comment. Without `--strip` it never edits your files, and it never sends code anywhere. It exits deterministically so the hook can gate automation.
+[![npm version](https://img.shields.io/npm/v/@systemfsoftware/claude-code-comment-checker.svg)](https://www.npmjs.com/package/@systemfsoftware/claude-code-comment-checker)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/systemfsoftware/comment-checker/blob/master/LICENSE)
 
-## Install
+`@systemfsoftware/claude-code-comment-checker` is the npm distribution launcher for `comment-checker`, a standalone `PostToolUse` hook for Claude Code that classifies code comments as justified or unnecessary across 37 programming languages.
 
-One command, for any npm-compatible manager (npm, pnpm, yarn, bun):
+It downloads or executes native platform binaries for Linux, macOS, and Windows via optional platform dependencies. Without `--strip`, it never modifies files on disk and performs all parsing and classification offline.
+
+## Quick Start
+
+### 1. Install globally
 
 ```bash
 pnpm add -g @systemfsoftware/claude-code-comment-checker
 ```
 
-Prebuilt native binaries for Linux (x64, arm64), macOS (x64, arm64), and Windows (x64) are selected through `os`/`cpu` constraints, so `--ignore-scripts` environments work.
+*Compatible with `npm`, `yarn`, and `bun`.*
 
-| Method | Command |
-|---|---|
-| npm/pnpm/yarn/bun | `pnpm install -g @systemfsoftware/claude-code-comment-checker` |
-| Cargo (from source) | `cargo install --git https://github.com/systemfsoftware/comment-checker --package claude-code-comment-checker` |
+### 2. Configure Claude Code
 
-## Wire it into Claude Code
-
-Add the hook to user (`~/.claude/settings.json`) or project (`.claude/settings.json`) configuration:
+Add the command hook to your project's `.claude/settings.json` or your global `~/.claude/settings.json`:
 
 ```json
 {
@@ -28,7 +28,10 @@ Add the hook to user (`~/.claude/settings.json`) or project (`.claude/settings.j
       {
         "matcher": "Write|Edit|MultiEdit",
         "hooks": [
-          { "type": "command", "command": "comment-checker" }
+          {
+            "type": "command",
+            "command": "comment-checker"
+          }
         ]
       }
     ]
@@ -36,21 +39,21 @@ Add the hook to user (`~/.claude/settings.json`) or project (`.claude/settings.j
 }
 ```
 
-The hook's resolution chain is PATH first, then `direnv exec`:
+## How It Works
 
-- When `comment-checker` is on PATH, the hook runs it directly. Install globally and the package manager's bin directory must be on PATH (`pnpm bin -g` or `npm bin -g`).
-- When the binary is missing on PATH, the hook falls back to `direnv exec "$CLAUDE_PROJECT_DIR"`. Projects with a `flake.nix` that provides the checker (wrapped in bubblewrap) need a `.envrc` containing `use flake` and a one-time `direnv allow`.
-- When neither arm resolves, the hook reports that it did not run — nothing was checked. Run the [setup and repair skill](https://github.com/systemfsoftware/comment-checker/blob/master/.claude/skills/comment-checker-setup/SKILL.md) to fix it.
+When Claude Code executes a tool call matching `Write`, `Edit`, or `MultiEdit`, the tool input payload is piped to `comment-checker` over `stdin`.
 
-On `Edit` and `MultiEdit`, only the comments *added* by the edit are checked; pre-existing comments are left alone, and restatement detection is disabled on edit fragments to avoid false positives.
+- **On clean code (Pass)**: The process outputs `[check-comments] Skipping: No unnecessary comments found` on `stdout` and exits with status code `0`.
+- **On flagged comments (Block)**: The process formats an explanation detailing why each comment was flagged, outputs the diagnostics to `stderr`, and exits with status code `2`. Claude Code passes `stderr` back to the model to prompt remediation.
+- **On partial edits**: On `Edit` and `MultiEdit`, only freshly introduced comments are evaluated. Pre-existing comments in surrounding lines are preserved.
 
-## See it in action
+## Example Output
 
-Pipe a `Write` payload to the binary. The report goes to stderr, so `2>&1` keeps it when you redirect:
+Piping a tool payload with unnecessary comments:
 
 ```bash
-$ echo '{"tool_name":"Write","tool_input":{"file_path":"demo.ts","content":"// increment counter\nlet counter = 0;\ncounter += 1;\n"}}' | comment-checker 2>&1
-An automated reviewer flagged 1 comment(s) in demo.ts as unnecessary.
+$ echo '{"tool_name":"Write","tool_input":{"file_path":"src/math.ts","content":"// increment counter\ncounter += 1;\n"}}' | comment-checker 2>&1
+An automated reviewer flagged 1 comment(s) in src/math.ts as unnecessary.
 
 Each is stated with the specific reason it should be removed. Do not
 dismiss these as "justified" — the reason is given so the claim can be
@@ -63,72 +66,82 @@ one, make the code self-explanatory instead — better names, extraction,
 a clearer type — and do not re-add the comment.
 ```
 
-The exit status is the contract: this write exited `2`. A clean write prints a skip note and exits `0`:
+## Supported Classifications
 
-```bash
-$ echo '{"tool_name":"Write","tool_input":{"file_path":"demo.ts","content":"// SPDX-License-Identifier: Apache-2.0\nexport const x = 1;\n"}}' | comment-checker 2>&1
-[check-comments] Skipping: No unnecessary comments found
-```
-
-## What it flags and what it spares
-
-| Comment kind | Cited reason | Example |
+| Classification | Rule Description | Example |
 |---|---|---|
-| Restates code | `restates what the code already says` | `// adds one to one` next to `x += 1` |
-| Narrates flow | `narrates the <construct> the code already shows` | `// loop over each item` next to `for item in items:` |
-| Change-log memo | `describes what changed, not why` — git already records it | `// Changed from old_value to new_value` |
-| Dead code | `dead code left in a comment` | `// console.log("debug")` |
-| Untracked TODO | `a TODO with no tracked reference` | `// TODO: fix this later` |
+| **Restatement** | Restates syntax or operations visible in adjacent code | `// increment counter` above `counter += 1;` |
+| **Control Flow** | Narrates standard control flow structures | `// loop through items` above `for item in items:` |
+| **Changelog Memo** | Explains prior code states that belong in git history | `// Changed from old_api to new_api` |
+| **Dead Code** | Commented-out code blocks or debugging statements | `// console.log("debug", value);` |
+| **Untracked TODO** | Action items with no ticket or reference issue | `// TODO: fix this later` |
 
-Spared without warning: license and generated headers, directives (`# noqa: E501`, `// @ts-ignore`), BDD steps (`# given`, `// then`), structured API docs (`@param`, `Returns:`), non-obvious intent, `Why:` notes and `// ref:` links, and shebang lines.
+### Allowed Comments
 
-## Exit codes
+The classifier preserves:
+- License headers and SPDX tags (`// SPDX-License-Identifier: Apache-2.0`)
+- Linter and compiler directives (`// eslint-disable-next-line`, `# noqa: E501`, `// @ts-ignore`)
+- Structured API documentation (`@param`, `@returns`, `Args:`, `Returns:`, `# Safety`)
+- Non-obvious intent and architectural rationale (`// Workaround for upstream race in connection pool`)
+- BDD test annotations (`// Given`, `// When`, `// Then`)
 
-| Code | Meaning |
-|---|---|
-| `0` | Pass — no unnecessary comments found (empty or unparseable payload also passes) |
-| `2` | Block — one or more unnecessary comments; the report is on stderr, the stream a host forwards to the model |
+## Exit Code Contract
 
-## Configuration
+| Exit Code | Result | Destination Stream | Description |
+|---|---|---|---|
+| `0` | Pass | `stdout` | Clean code or unparseable payload (fails open) |
+| `2` | Block | `stderr` | Unnecessary comments detected; diagnostics sent to model |
 
-Replace the default warning text with `--prompt` and put the report where it goes:
+## Options
+
+### Custom Prompt Text (`--prompt`)
+
+Customize the instruction wrapper surrounding the diagnostics:
 
 ```bash
-comment-checker --prompt "Review feedback:\n\n{{comments}}\n\nRevise the code."
+comment-checker --prompt "Formatting Guidelines Violation:\n\n{{comments}}\n\nPlease clean up the comments."
 ```
 
-Delete whole-line flagged comments from the file named in the payload with `--strip`. Trailing and inline comments stay in the file and are still reported:
+### Auto-Strip Mode (`--strip`)
 
-```bash
-comment-checker --strip
-```
+Pass `--strip` to delete flagged whole-line comments directly from the target file on disk when invoked:
 
 ```json
 {
-  "hooks": { "PostToolUse": [ { "matcher": "Write|Edit|MultiEdit", "hooks": [ { "type": "command", "command": "comment-checker --strip" } ] } ] }
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "comment-checker --strip"
+          }
+        ]
+      }
+    ]
+  }
 }
 ```
 
 ## Troubleshooting
 
-**Q: `command not found: comment-checker` after installing.**
-A: The package manager's global bin directory is not on PATH. Check with `pnpm bin -g` or `npm bin -g`, then add that directory to PATH.
+### `command not found: comment-checker`
+Ensure your global npm/pnpm/yarn binary directory is included in your system `$PATH`:
+- pnpm: `pnpm bin -g`
+- npm: `npm bin -g`
+- yarn: `yarn global bin`
 
-**Q: The hook reports "comment-checker did not run".**
-A: The hook could not resolve the binary on PATH and the `direnv exec` fallback also missed. For a flake-based project, run `direnv allow` once so the `.envrc` loads; otherwise install globally and fix PATH. The [setup and repair skill](https://github.com/systemfsoftware/comment-checker/blob/master/.claude/skills/comment-checker-setup/SKILL.md) ships a doctor (`scripts/doctor.ts`) that probes resolution, identity, the exit-code contract, hook wiring, and the direnv bridge, and prints a fix hint per broken check.
+### Verification via Doctor Tool
+For repository setup diagnosis (PATH resolution, direnv fallbacks, binary identity verification), review the [comment-checker-setup skill](https://github.com/systemfsoftware/comment-checker/blob/master/.claude/skills/comment-checker-setup/SKILL.md) and execute its diagnostic script:
 
-**Q: Does it modify my files?**
-A: Not unless you pass `--strip`. The default reads a hook payload over stdin and prints a report.
+```bash
+deno run -A https://raw.githubusercontent.com/systemfsoftware/comment-checker/master/.claude/skills/comment-checker-setup/scripts/doctor.ts
+```
 
-**Q: Does it send my code anywhere?**
-A: No network requests at all. The binary is fully offline.
+## Links
 
-**Q: It is flagging comments in unrelated files.**
-A: It reads the hook payload's file path and skips unsupported formats. If a `matcher` scope is too wide, restrict it in settings — most setups want `Write|Edit|MultiEdit` only.
-
-## Resources
-
-- Full documentation — comments flagged, comments spared, the 37 languages, and version history: [the project README](https://github.com/systemfsoftware/comment-checker/blob/master/README.md)
-- Setup and repair: [the comment-checker-setup skill](https://github.com/systemfsoftware/comment-checker/blob/master/.claude/skills/comment-checker-setup/SKILL.md), including its [doctor script](https://github.com/systemfsoftware/comment-checker/blob/master/.claude/skills/comment-checker-setup/scripts/doctor.ts)
-- License: [Apache-2.0](https://github.com/systemfsoftware/comment-checker/blob/master/LICENSE)
-- Development and contributing: [AGENTS.md](https://github.com/systemfsoftware/comment-checker/blob/master/AGENTS.md)
+- **Repository**: [github.com/systemfsoftware/comment-checker](https://github.com/systemfsoftware/comment-checker)
+- **Rust Core & Native Builds**: [GitHub Releases](https://github.com/systemfsoftware/comment-checker/releases)
+- **Issues & Support**: [GitHub Issues](https://github.com/systemfsoftware/comment-checker/issues)
+- **License**: [Apache-2.0](https://github.com/systemfsoftware/comment-checker/blob/master/LICENSE)
