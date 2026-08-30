@@ -19,9 +19,8 @@
 
 - **Usage & Hook Setup**: See the [npm launcher README](npm/packages/comment-checker/README.md) for installation, settings configuration, and CLI flags.
 - **Diagnostic Tooling**: See the [comment-checker-setup skill](.claude/skills/comment-checker-setup/SKILL.md) for hook verification and troubleshooting.
-- **Development & Verification**: See [AGENTS.md](AGENTS.md) for Cargo build gates, code standards, and mutation test instructions.
+- **Contributing**: See [CONTRIBUTING.md](CONTRIBUTING.md) for development rules, branch discipline, and verification gates.
 - **Architecture & Vocabulary**: See [CONCEPTS.md](CONCEPTS.md) for domain terms and classifier verdict mechanics.
-
 ## License
 
 [Apache-2.0](LICENSE)
