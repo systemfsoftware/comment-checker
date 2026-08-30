@@ -2,13 +2,13 @@
 title: "Deno denies spawning when LD_*/DYLD_* env vars are present, and the hook either crashed or silently passed — scrub the env class and absorb every spawn failure"
 date: 2026-08-30
 category: runtime-errors
-module: hooks/run.ts (Deno launcher), hooks/hooks.json + .claude/settings.json (hook surfaces), crates/comment-checker/tests/wire.rs
+module: hooks (Deno launcher + hook surfaces)
 problem_type: runtime_error
 component: dev-tooling
 symptoms:
   - "`Uncaught (in promise) NotCapable: Requires --allow-run permissions to spawn subprocess with LD_FOR_BUILD environment variable` on every Write tool result; writes landed but nothing was checked"
   - "Launcher exit 2 blocks the write while exit 1 does not on some hosts — the silent-pass hole was the settings surface ending `|| exit 0`, and the 8-name env scrub missed unlisted LD_* vars (LD_PRELOAD_64, LD_ASSUME_KERNEL)"
-  - "wire.rs passed green after the fix while asserting a token ('NotCapable') that existed only in a comment — reverting the catch-all still left the test green (CHK1)"
+  - "A source-text grep test passed green after the fix while asserting a token ('NotCapable') that existed only in a comment — reverting the catch-all still left the test green (CHK1)"
 root_cause: missing_validation
 resolution_type: code_fix
 severity: high
@@ -43,7 +43,7 @@ env $(env | awk -F= '$1 ~ /^(LD_|DYLD_)/ { printf "-u %s ", $1 }') deno run --co
 ```
 
 - **Absorb every spawn failure in the launcher.** The previous code rethrew non-`NotFound` errors; now `} catch { return undefined }` maps any spawn failure to the binary-unavailable fallback chain, so no environment can turn the hook into a crash.
-- **Pin the mechanism, not the token.** The wire test now asserts `run_ts.contains("} catch {") && !run_ts.contains("throw error")` — the structural pair that the old rethrow would violate.
+- **No source-text wiring tests.** The text-grep test was removed as tautology — it restated the config that contained the strings. Verification is behavioral only (smokes; see the filed launcher-smoke residual).
 
 ## Why This Works
 
