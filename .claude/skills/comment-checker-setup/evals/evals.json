@@ -1,0 +1,56 @@
+[
+  {
+    "id": "resolve-path",
+    "prompt": "comment-checker does not resolve when the hook runs, though it works in my shell. What is the first step the fix workflow prescribes?",
+    "needles": [
+      "W1",
+      "doctor"
+    ]
+  },
+  {
+    "id": "blocked-envrc",
+    "prompt": "The hook reports 'comment-checker did not run' and direnv says the .envrc is blocked. After allowing it, what does the skill's common-failure check run to verify?",
+    "needles": [
+      "F2",
+      "direnv exec . command -v comment-checker"
+    ]
+  },
+  {
+    "id": "identity-shadow",
+    "prompt": "A binary named comment-checker responds on PATH, but examining it reveals it is not the checker this skill assumes. What exact output contract does the skill's identity check require?",
+    "needles": [
+      "claude-code-comment-checker",
+      "semver"
+    ]
+  },
+  {
+    "id": "doctor-run",
+    "prompt": "You wired the hook but want proof it actually checks edits, the way the skill's verification section demands. What artifact and what exit does the gate require?",
+    "needles": [
+      "doctor.ts",
+      "exit 2",
+      "V1"
+    ]
+  },
+  {
+    "id": "flake-direnv-wiring",
+    "prompt": "A flake.nix provides the checker. The skill's W3 workflow names two exact steps that complete the direnv wiring. What are they?",
+    "needles": [
+      "W3",
+      "direnv allow",
+      "direnv exec . command -v comment-checker"
+    ]
+  },
+  {
+    "id": "negative-trigger-comment-advice",
+    "prompt": "Is this comment restating the code? // increments counter next to counter += 1",
+    "should_not_trigger": true,
+    "needles": []
+  },
+  {
+    "id": "negative-trigger-other-hook",
+    "prompt": "My lint hook subprocess drops PATH but is unrelated to comment-checker. What do I do?",
+    "should_not_trigger": true,
+    "needles": []
+  }
+]
