@@ -12,8 +12,8 @@ importers:
         specifier: latest
         version: 0.38.0
       '@systemfsoftware/tsconfig':
-        specifier: ^1.3.2
-        version: 1.3.2
+        specifier: ^1.3.3
+        version: 1.3.3
       husky:
         specifier: ^9.1.7
         version: 9.1.7
@@ -389,8 +389,8 @@ packages:
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
-  '@systemfsoftware/tsconfig@1.3.2':
-    resolution: {integrity: sha512-J0AyHSupc48s5fRhQODDiYU+4oEntQPwTxqV0u5aFlXovTvjjLxKMzjITB6VrUZp4IFK+KFPym1t8DCtpaksyw==}
+  '@systemfsoftware/tsconfig@1.3.3':
+    resolution: {integrity: sha512-k3VnkwhSo07LJ4l0rIqgiW81ELZXDtWoJxs/Ymk1UM6vpq1dAXWzb4TTDPY90rkyOtGKJYKRcaR9LpkzIiOBdA==}
 
   '@turbo/darwin-64@2.10.12':
     resolution: {integrity: sha512-9nKgKoF6ZOUsM+or0OtNf+TTJSfGvDNP7ZFv/ZGWVwOSCkumyctQiTeHwB4UNljHTnC41AqylgbunLDHoccNrA==}
@@ -1112,7 +1112,7 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.1': {}
 
-  '@systemfsoftware/tsconfig@1.3.2': {}
+  '@systemfsoftware/tsconfig@1.3.3': {}
 
   '@turbo/darwin-64@2.10.12':
     optional: true
