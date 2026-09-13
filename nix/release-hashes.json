@@ -1,0 +1,16 @@
+{
+  "version": "0.3.4",
+  "assets": {
+    "x86_64-unknown-linux-gnu": "b61e934e3878a7661a1c8f661d8e280e2d0897c2d6673921c43c97093d6b5714",
+    "aarch64-unknown-linux-gnu": "9d38c0e3f82b874c60411e797cadbb38fac750b7afd4e889fc27f5118862e8a7",
+    "x86_64-apple-darwin": "3673b553365293bd5ae594c2960e152da607c029b8f62eda57eb0e37a8a1de5f",
+    "aarch64-apple-darwin": "e8dd56869cfa2466cfc32401226962b39929f9a7a6510c5922c5745edd14ad27",
+    "x86_64-pc-windows-msvc": "5f37a3f8561de8ccf408985660cb7704bc70b30824f5ea64c31d6eecf58bf12c"
+  },
+  "systems": {
+    "x86_64-linux": "x86_64-unknown-linux-gnu",
+    "aarch64-linux": "aarch64-unknown-linux-gnu",
+    "x86_64-darwin": "x86_64-apple-darwin",
+    "aarch64-darwin": "aarch64-apple-darwin"
+  }
+}
