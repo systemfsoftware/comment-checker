@@ -30,7 +30,7 @@ Add the command hook to your project's `.claude/settings.json` or your global `~
         "hooks": [
           {
             "type": "command",
-            "command": "if command -v comment-checker >/dev/null 2>&1; then\n  comment-checker\n  rc=$?\nelif command -v direnv >/dev/null 2>&1; then\n  direnv exec \"${CLAUDE_PROJECT_DIR:-$PWD}\" sh -c 'command -v comment-checker >/dev/null 2>&1 || exit 127; exec comment-checker'\n  rc=$?\nelse\n  rc=127\nfi\ncase $rc in 0|2) exit $rc ;; esac\ncat >/dev/null\nif [ \"$rc\" -eq 127 ]; then\n  echo \"comment-checker did not run — nothing checked this write.\" >&2\nelse\n  echo \"comment-checker failed (exit $rc) — nothing checked this write.\" >&2\nfi\nexit 1"
+            "command": "if command -v comment-checker >/dev/null 2>&1; then\n  comment-checker\n  rc=$?\nelif command -v direnv >/dev/null 2>&1; then\n  direnv exec \"${CLAUDE_PROJECT_DIR:-$PWD}\" sh -c 'command -v comment-checker >/dev/null 2>&1 || exit 127; exec comment-checker'\n  rc=$?\n  [ \"$rc\" -eq 127 ] && rc=\nelse\n  rc=\nfi\ncase \"$rc\" in 0|2) exit \"$rc\" ;; esac\ncat >/dev/null\nif [ -z \"$rc\" ]; then\n  echo \"comment-checker did not run — nothing checked this write.\" >&2\nelse\n  echo \"comment-checker failed (exit $rc) — nothing checked this write.\" >&2\nfi\nexit 1"
           }
         ]
       }

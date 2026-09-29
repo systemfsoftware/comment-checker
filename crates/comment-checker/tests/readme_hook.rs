@@ -108,7 +108,7 @@ impl Sandbox {
         self.install("bin", "direnv", &body);
     }
 
-    fn install_direnv_failing_before_stdin(&self) {
+    fn install_direnv_blocked_by_envrc(&self) {
         self.install(
             "bin",
             "direnv",
@@ -227,22 +227,27 @@ fn readme_hook_drains_payload_and_reports_when_checker_is_on_neither_path_nor_di
 }
 
 #[test]
-fn readme_hook_drains_payload_and_reports_failure_when_direnv_fails_before_running_checker() {
+fn readme_hook_drains_payload_and_reports_failure_when_direnv_envrc_is_blocked() {
     let sandbox = Sandbox::new();
-    sandbox.install_direnv_failing_before_stdin();
+    sandbox.install_direnv_blocked_by_envrc();
     assert_drains_and_reports(&sandbox, "direnv .envrc blocked", &failed_report(1));
 }
 
 #[test]
-fn readme_hook_drains_payload_and_reports_failure_when_path_checker_exits_without_reading_stdin() {
-    let sandbox = Sandbox::new();
-    sandbox.install_checker_exiting_without_reading_stdin("bin", 101);
-    assert_drains_and_reports(&sandbox, "PATH checker exits 101", &failed_report(101));
+fn readme_hook_drains_payload_and_reports_failure_when_path_checker_crashes() {
+    for code in [101, 127] {
+        let sandbox = Sandbox::new();
+        sandbox.install_checker_exiting_without_reading_stdin("bin", code);
+        assert_drains_and_reports(
+            &sandbox,
+            &format!("PATH checker exits {code}"),
+            &failed_report(code),
+        );
+    }
 }
 
 #[test]
-fn readme_hook_drains_payload_and_reports_failure_when_direnv_checker_exits_without_reading_stdin()
-{
+fn readme_hook_drains_payload_and_reports_failure_when_direnv_checker_crashes() {
     let sandbox = Sandbox::new();
     sandbox.install_direnv_loading_project_env();
     sandbox.install_checker_exiting_without_reading_stdin("hidden", 101);
