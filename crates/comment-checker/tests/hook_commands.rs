@@ -402,4 +402,11 @@ fn plugin_hook_drains_payload_and_reports_when_project_dir_is_unset() {
     let sandbox = Sandbox::new(Surface::Plugin).without_project_dir();
     sandbox.install_checker_recording_stdin("bin", 0);
     assert_drains_and_reports(&sandbox, "CLAUDE_PROJECT_DIR unset", NOT_RUN);
+
+    let (_, output) = sandbox.bytes_read_through_shared_file_offset(&payload());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("CLAUDE_PROJECT_DIR must be set by the hook host"),
+        "run.ts, not a deno start-up failure, must be what reported; stderr: {stderr}"
+    );
 }
