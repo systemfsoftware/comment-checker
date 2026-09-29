@@ -5,6 +5,7 @@ import { type } from 'arktype'
 
 const NOT_RUN = 'comment-checker did not run — nothing checked this write.'
 const failed = (code: number) => `comment-checker failed (exit ${code}) — nothing checked this write.`
+// Deno itself exits 1 on errors and 101 on panics, never 3, so hooks.json can read 3 as "run.ts already reported".
 const REPORTED_UNCHECKED = 3
 
 async function report(lines: string[]): Promise<never> {
