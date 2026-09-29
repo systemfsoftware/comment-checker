@@ -6,6 +6,7 @@ use std::io::{self, Seek, Write};
 use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
+use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 
@@ -89,7 +90,7 @@ impl Surface {
     fn host_tools(self) -> &'static [&'static str] {
         match self {
             Self::Readme => &["cat", "sh"],
-            Self::Plugin => &["cat", "sh", "env", "awk", "deno"],
+            Self::Plugin => &["cat", "sh", "env", "awk"],
         }
     }
 }
@@ -106,12 +107,37 @@ fn payload() -> Vec<u8> {
     .into_bytes()
 }
 
-fn host_executable(name: &str) -> PathBuf {
+fn find_host_executable(name: &str) -> Option<PathBuf> {
     std::env::split_paths(&std::env::var_os("PATH").expect("PATH is set"))
         .map(|dir| dir.join(name))
         .find(|path| path.is_file())
-        .unwrap_or_else(|| panic!("`{name}` must be on the test host's PATH"))
 }
+
+fn host_executable(name: &str) -> PathBuf {
+    find_host_executable(name).unwrap_or_else(|| panic!("`{name}` must be on the test host's PATH"))
+}
+
+static DENO_WITH_WARM_CACHE: LazyLock<PathBuf> = LazyLock::new(|| {
+    let deno = host_executable("deno");
+    let output = Command::new(&deno)
+        .args(["run", "--cached-only", "--config"])
+        .arg(format!("{PLUGIN_ROOT}/hooks/deno.jsonc"))
+        .args(["--allow-read", "--allow-run=comment-checker,direnv"])
+        .arg("--allow-env=CLAUDE_PROJECT_DIR,PATH,HOME")
+        .arg(format!("{PLUGIN_ROOT}/hooks/run.ts"))
+        .env_remove("CLAUDE_PROJECT_DIR")
+        .stdin(Stdio::null())
+        .output()
+        .expect("run deno");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("CLAUDE_PROJECT_DIR must be set"),
+        "hooks/run.ts's dependencies are not in deno's cache. The plugin hook tests run deno \
+         with --cached-only; warm the cache first with \
+         `deno cache --frozen --config hooks/deno.jsonc hooks/run.ts`. deno said: {stderr}"
+    );
+    deno
+});
 
 struct Sandbox {
     surface: Surface,
@@ -123,10 +149,14 @@ struct Sandbox {
 
 impl Sandbox {
     fn new(surface: Surface) -> Self {
-        Self::with_host_tools(surface, surface.host_tools())
+        let sandbox = Self::bare(surface);
+        if let Surface::Plugin = surface {
+            sandbox.install_cached_only_deno();
+        }
+        sandbox
     }
 
-    fn with_host_tools(surface: Surface, tools: &[&str]) -> Self {
+    fn bare(surface: Surface) -> Self {
         static SEQ: AtomicU64 = AtomicU64::new(0);
         let root = std::env::temp_dir().join(format!(
             "comment-checker-hook-{}-{}",
@@ -136,7 +166,7 @@ impl Sandbox {
         for dir in ["bin", "hidden", "project", "hook-cwd"] {
             fs::create_dir_all(root.join(dir)).expect("create sandbox dir");
         }
-        for tool in tools {
+        for tool in surface.host_tools() {
             symlink(host_executable(tool), root.join("bin").join(tool)).expect("link tool");
         }
         Self {
@@ -174,6 +204,14 @@ impl Sandbox {
 
     fn install_checker_exiting_without_reading_stdin(&self, dir: &str, code: i32) {
         self.install(dir, "comment-checker", &format!("exit {code}"));
+    }
+
+    fn install_cached_only_deno(&self) {
+        let body = format!(
+            "subcommand=$1\nshift\nexec '{}' \"$subcommand\" --cached-only \"$@\"",
+            DENO_WITH_WARM_CACHE.display()
+        );
+        self.install("bin", "deno", &body);
     }
 
     fn install_direnv_loading_project_env(&self) {
@@ -340,7 +378,7 @@ fn hook_drains_payload_and_reports_failure_when_direnv_envrc_is_blocked() {
 #[test]
 fn hook_drains_payload_and_reports_failure_when_path_checker_crashes() {
     for surface in Surface::ALL {
-        for code in [101, 127] {
+        for code in [3, 101, 127] {
             let sandbox = Sandbox::new(surface);
             sandbox.install_checker_exiting_without_reading_stdin("bin", code);
             assert_drains_and_reports(
@@ -355,10 +393,16 @@ fn hook_drains_payload_and_reports_failure_when_path_checker_crashes() {
 #[test]
 fn hook_drains_payload_and_reports_failure_when_direnv_checker_crashes() {
     for surface in Surface::ALL {
-        let sandbox = Sandbox::new(surface);
-        sandbox.install_direnv_loading_project_env();
-        sandbox.install_checker_exiting_without_reading_stdin("hidden", 101);
-        assert_drains_and_reports(&sandbox, "direnv checker exits 101", &failed_report(101));
+        for code in [3, 101] {
+            let sandbox = Sandbox::new(surface);
+            sandbox.install_direnv_loading_project_env();
+            sandbox.install_checker_exiting_without_reading_stdin("hidden", code);
+            assert_drains_and_reports(
+                &sandbox,
+                &format!("direnv checker exits {code}"),
+                &failed_report(code),
+            );
+        }
     }
 }
 
@@ -384,14 +428,14 @@ fn hook_runs_checker_through_direnv_with_payload_unchanged_and_exit_passed_throu
 
 #[test]
 fn plugin_hook_drains_payload_and_reports_when_deno_is_missing() {
-    let sandbox = Sandbox::with_host_tools(Surface::Plugin, &["cat", "sh", "env", "awk"]);
+    let sandbox = Sandbox::bare(Surface::Plugin);
     sandbox.install_checker_recording_stdin("bin", 0);
     assert_drains_and_reports(&sandbox, "deno not on PATH", NOT_RUN);
 }
 
 #[test]
 fn plugin_hook_drains_payload_and_reports_when_deno_dies_before_the_launcher_reports() {
-    let sandbox = Sandbox::with_host_tools(Surface::Plugin, &["cat", "sh", "env", "awk"]);
+    let sandbox = Sandbox::bare(Surface::Plugin);
     sandbox.install("bin", "deno", "echo 'error: Module not found' >&2\nexit 1");
     sandbox.install_checker_recording_stdin("bin", 0);
     assert_drains_and_reports(&sandbox, "deno exits 1 before run.ts starts", NOT_RUN);
@@ -408,5 +452,73 @@ fn plugin_hook_drains_payload_and_reports_when_project_dir_is_unset() {
     assert!(
         stderr.contains("CLAUDE_PROJECT_DIR must be set by the hook host"),
         "run.ts, not a deno start-up failure, must be what reported; stderr: {stderr}"
+    );
+}
+
+#[test]
+fn real_direnv_exits_1_without_running_the_command_when_envrc_is_blocked_or_command_is_missing() {
+    let Some(direnv) = find_host_executable("direnv") else {
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "CI must install direnv: this test checks the direnv stubs against the real thing"
+        );
+        eprintln!(
+            "SKIPPED real_direnv_…: direnv is not on PATH, so the direnv stubs are unchecked against real direnv"
+        );
+        return;
+    };
+    let sandbox = Sandbox::bare(Surface::Readme);
+    let project = sandbox.root.join("project");
+    let home = sandbox.root.join("home");
+    let marker = sandbox.root.join("command-ran");
+    fs::write(project.join(".envrc"), "export COMMENT_CHECKER_TEST=1\n").expect("write .envrc");
+    let direnv_cmd = |args: &[&str]| {
+        Command::new(&direnv)
+            .args(args)
+            .env_clear()
+            .env("PATH", std::env::var_os("PATH").expect("PATH is set"))
+            .env("HOME", &home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .stdin(Stdio::null())
+            .output()
+            .expect("run direnv")
+    };
+    let project_arg = project.to_str().expect("utf-8 project path");
+    let touch_marker = format!("touch '{}'", marker.display());
+    let exec = |command: &[&str]| {
+        let mut args = vec!["exec", project_arg];
+        args.extend_from_slice(command);
+        direnv_cmd(&args)
+    };
+
+    let blocked = exec(&["sh", "-c", &touch_marker]);
+    assert_eq!(
+        blocked.status.code(),
+        Some(1),
+        "blocked .envrc: {}",
+        String::from_utf8_lossy(&blocked.stderr)
+    );
+    assert!(
+        !marker.exists(),
+        "direnv ran the command despite a blocked .envrc"
+    );
+
+    let allowed = direnv_cmd(&["allow", project_arg]);
+    assert!(allowed.status.success(), "direnv allow failed: {allowed:?}");
+
+    let missing = exec(&["comment-checker-not-installed"]);
+    assert_eq!(
+        missing.status.code(),
+        Some(1),
+        "missing command: {}",
+        String::from_utf8_lossy(&missing.stderr)
+    );
+
+    let ran = exec(&["sh", "-c", &touch_marker]);
+    assert!(
+        ran.status.success() && marker.exists(),
+        "an allowed .envrc must run the command: {ran:?}"
     );
 }
