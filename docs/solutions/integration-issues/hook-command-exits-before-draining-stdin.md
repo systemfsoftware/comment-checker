@@ -85,6 +85,6 @@ While the fix was being developed, six substitutions of the README command were 
 
 ## Related Issues
 
-- #110: this issue. As of this writing, the fix is pending in the PR for #110.
+- #110: this issue. As of this writing, the fix is pending in #111.
 - `docs/solutions/runtime-errors/deno-env-sensitive-spawn-crash-silent-pass-hook.md`: same hook surfaces and exit contract. It predates the drain rule.
 - `docs/solutions/integration-issues/diagnostic-hook-needs-fixtures-on-both-sides.md`: the PATH-first, direnv-fallback resolution model, and fixtures on both sides of a boundary.
