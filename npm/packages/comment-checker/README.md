@@ -30,7 +30,7 @@ Add the command hook to your project's `.claude/settings.json` or your global `~
         "hooks": [
           {
             "type": "command",
-            "command": "comment-checker"
+            "command": "command -v comment-checker >/dev/null 2>&1 && exec comment-checker\nif command -v direnv >/dev/null 2>&1; then\n  direnv exec \"${PWD:-.}\" comment-checker\n  rc=$?\n  case $rc in 0|2) exit $rc ;; esac\nfi\ncat >/dev/null\necho \"comment-checker did not run — nothing checked this write.\" >&2\nexit 1"
           }
         ]
       }
@@ -38,6 +38,8 @@ Add the command hook to your project's `.claude/settings.json` or your global `~
   }
 }
 ```
+
+The command runs `comment-checker` from `PATH`, then through `direnv exec` for projects whose dev shell provides it. When neither resolves it, the command reads the whole hook payload from stdin, prints `comment-checker did not run — nothing checked this write.` to `stderr`, and exits `1`. The write is reported as unchecked, not silently passed.
 
 ## How It Works
 
