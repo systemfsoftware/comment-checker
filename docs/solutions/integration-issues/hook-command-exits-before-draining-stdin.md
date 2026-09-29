@@ -19,7 +19,7 @@ tags: [hook, stdin-drain, epipe, direnv, posix-shell, silent-pass, gatekeeper]
 
 ## Problem
 
-A PostToolUse hook receives the tool payload on stdin. A hook command that exits on any path without reading all of it leaves the host's writer blocked on a full pipe, and the writer gets EPIPE when the reader closes. Issue #110 found this in the npm README's Quick Start snippet. The repo's other two hook surfaces have the same defect.
+A PostToolUse hook receives the tool payload on stdin. A hook command that exits on any path without reading all of it leaves the host's writer blocked on a full pipe, and the writer gets EPIPE when the reader closes. Issue #110 found this in the npm README's Quick Start snippet; issue #112 found the same defect in the repo's own `settings.json` hook and in the plugin hook (`hooks.json` launching `run.ts`).
 
 ## Symptoms
 
@@ -68,14 +68,18 @@ exit 1
 - An empty `rc` means nothing resolved the checker: the did-not-run line. Any other code means something ran and failed: `comment-checker failed (exit $rc)`.
 - direnv is anchored to `CLAUDE_PROJECT_DIR`, matching `setup-resolution.md` and the `run.ts` launcher. The hook's cwd follows the session, not the project.
 
-The gatekeeper `readme_hook.rs` runs the exact text the README ships:
+The gatekeeper `hook_commands.rs` runs the exact text each surface ships:
 
-- `readme_hook_command` reads the README with `include_str!`, parses every `json` fence, and requires exactly one PostToolUse command hook. It never copies the command.
-- The hook runs as `<host sh> -c <command>` with `env_clear()`, a `PATH` holding only a `cat` symlink plus the stubs a case installs, a cwd outside the project, and `CLAUDE_PROJECT_DIR` set.
+- `readme_hook_command` and `plugin_hook_command` read the README's `json` fences and `hooks.json` with `include_str!` and require exactly one PostToolUse command hook each. They never copy a command. `repo_settings_hook_runs_the_readme_hook_command` requires the repo's `settings.json` to wire the README's command byte for byte, so the README cases cover it too.
+- Every outcome case runs once per `Surface` (README, plugin). The hook runs as `<host sh> -c <command>` with `env_clear()`, a `PATH` holding only the host tools that surface needs (`cat`, `sh`, plus `env`, `awk` and a `deno` wrapper that adds `--cached-only` for the plugin) and the stubs a case installs, a cwd outside the project, and `CLAUDE_PROJECT_DIR` and `CLAUDE_PLUGIN_ROOT` set. `DENO_WITH_WARM_CACHE` checks once that `run.ts`'s imports are already cached, so a cold cache fails with the warm-up command instead of fetching mid-test.
 - The payload is over 1 MiB (`CONTENT_LARGER_THAN_ANY_PIPE_BUFFER`), and drain is proven two ways:
   - `pipe_from_writer_thread`: `write_all` from a writer thread must return Ok.
   - `bytes_read_through_shared_file_offset`: stdin is a regular file passed through `File::try_clone()`. The child shares the open file description, so after it exits `stream_position()` must equal the payload length. That is an exact count of the bytes consumed.
-- Cases: no checker and no direnv; a direnv whose project env lacks the checker (did not run); a blocked `.envrc` (`install_direnv_blocked_by_envrc`, failed with exit 1); a checker that exits 101 without reading stdin, on `PATH` and behind direnv, plus exit 127 on `PATH` (failed with that code); and a stub checker on `PATH` and behind direnv that exits 0 and 2, with the payload captured byte-for-byte and no unchecked-write line on stderr. The direnv stub refuses any directory but `CLAUDE_PROJECT_DIR` and, like direnv 2.37, exits 1 when the command is missing (`install_direnv_loading_project_env`).
+- Cases: no checker and no direnv; a direnv whose project env lacks the checker (did not run); a blocked `.envrc` (`install_direnv_blocked_by_envrc`, failed with exit 1); a checker that exits 101 without reading stdin, on `PATH` and behind direnv, plus exit 127 on `PATH` (failed with that code); and a stub checker on `PATH` and behind direnv that exits 0 and 2, with the payload captured byte-for-byte and no unchecked-write line on stderr. The direnv stub refuses any directory but `CLAUDE_PROJECT_DIR` and, like direnv 2.37, exits 1 when the command is missing (`install_direnv_loading_project_env`). Plugin-only cases: `deno` missing, `deno` dying before `run.ts` reports, and `CLAUDE_PROJECT_DIR` unset (all did not run).
+
+The plugin hook splits the work. `run.ts` resolves and runs the checker, and on any unchecked outcome drains stdin, prints the matching line, and exits 3. The `hooks.json` command maps 3 to exit 1, and for any other exit outside 0 and 2 (a missing `deno`, or `deno` dying before `run.ts` could report) it drains with `cat >/dev/null`, prints the did-not-run line, and exits 1. Exit 3 is how the shell tells "the launcher already reported" apart from "the launcher never ran": both would otherwise be 1. A checker that itself exits 3 must still read as `failed (exit 3)`; the crash cases include 3 so a pass-through regression prints nothing and fails.
+
+The direnv stubs model two facts about real direnv: a blocked `.envrc` exits 1 without running the command, and a command missing from the loaded env exits 1. `real_direnv_exits_1_without_running_the_command_when_envrc_is_blocked_or_command_is_missing` checks both against the host's direnv (CI installs it; locally the test skips with a message when direnv is absent).
 
 ## Why This Works
 
@@ -94,10 +98,11 @@ While the fix was being developed, six substitutions of the README command were 
 - Treat "reads all of stdin" as part of a hook's exit contract, next to "never exit 0 when nothing ran" from `docs/solutions/runtime-errors/deno-env-sensitive-spawn-crash-silent-pass-hook.md`.
 - A test of a hook surface pipes more than one pipe buffer and proves the byte count, not only the absence of EPIPE. The shared-file-offset run is cheap and exact.
 - Test the text users copy (`include_str!` of the shipped doc), never a restatement of it.
-- Grep-able smell: a hook command or launcher whose failure branch runs `exit 1` (or `Deno.exit(1)`) without a preceding stdin read. The settings hook and the `run.ts` fallback both still match as of this writing.
+- Grep-able smell: a hook command or launcher whose failure branch runs `exit 1` (or `Deno.exit(1)`) without a preceding stdin read.
 
 ## Related Issues
 
-- #110: this issue. As of this writing, the fix is pending in #111.
+- #110: the README snippet; the fix is in #111.
+- #112: the repo settings hook and the plugin hook.
 - `docs/solutions/runtime-errors/deno-env-sensitive-spawn-crash-silent-pass-hook.md`: same hook surfaces and exit contract. It predates the drain rule.
 - `docs/solutions/integration-issues/diagnostic-hook-needs-fixtures-on-both-sides.md`: the PATH-first, direnv-fallback resolution model, and fixtures on both sides of a boundary.

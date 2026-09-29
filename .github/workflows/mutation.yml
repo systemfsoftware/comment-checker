@@ -19,6 +19,17 @@ jobs:
 
       - uses: ./.github/actions/setup-pnpm-node
 
+      - name: Deno for the plugin hook tests
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
+        with:
+          deno-version: 2.9.5
+
+      - name: Warm the deno cache for hooks/run.ts from deno.lock
+        run: deno cache --frozen --config hooks/deno.jsonc hooks/run.ts
+
+      - name: direnv for the real-direnv test
+        run: sudo apt-get update && sudo apt-get install -y direnv
+
       - name: Install cargo-mutants subcommand
         run: |
           cargo install cargo-mutants

@@ -3,20 +3,15 @@
 import { writeAll } from '@std/io/write-all'
 import { type } from 'arktype'
 
-const Env = type({
-  CLAUDE_PROJECT_DIR: type('string.trim').pipe(type('string').atLeastLength(1)),
-})
+const NOT_RUN = 'comment-checker did not run — nothing checked this write.'
+const failed = (code: number) => `comment-checker failed (exit ${code}) — nothing checked this write.`
+// Deno itself exits 1 on errors and 101 on panics, never 3, so hooks.json can read 3 as "run.ts already reported".
+const REPORTED_UNCHECKED = 3
 
-const env = Env({
-  CLAUDE_PROJECT_DIR: Deno.env.get('CLAUDE_PROJECT_DIR') ?? '',
-})
-
-if (env instanceof type.errors) {
-  await writeAll(
-    Deno.stderr,
-    new TextEncoder().encode(`CLAUDE_PROJECT_DIR must be set by the hook host\n${env.summary}\n`),
-  )
-  Deno.exit(1)
+async function report(lines: string[]): Promise<never> {
+  await Deno.stdin.readable.pipeTo(new WritableStream())
+  await writeAll(Deno.stderr, new TextEncoder().encode(lines.map((line) => `${line}\n`).join('')))
+  Deno.exit(REPORTED_UNCHECKED)
 }
 
 async function run(cmd: string, args: string[]): Promise<number | undefined> {
@@ -33,24 +28,31 @@ async function run(cmd: string, args: string[]): Promise<number | undefined> {
   }
 }
 
-const projectDir = env.CLAUDE_PROJECT_DIR
-
-const fromPath = await run('comment-checker', [])
-if (fromPath !== undefined) Deno.exit(fromPath)
-
-const fromDirenv = await run('direnv', ['exec', projectDir, 'comment-checker'])
-if (fromDirenv !== undefined) {
-  if (fromDirenv !== 0 && fromDirenv !== 2) {
-    await writeAll(
-      Deno.stderr,
-      new TextEncoder().encode('comment-checker did not run — nothing checked this write.\n'),
-    )
-  }
-  Deno.exit(fromDirenv)
+async function checkerExit(projectDir: string): Promise<number | undefined> {
+  const fromPath = await run('comment-checker', [])
+  if (fromPath !== undefined) return fromPath
+  const fromDirenv = await run('direnv', [
+    'exec',
+    projectDir,
+    'sh',
+    '-c',
+    'command -v comment-checker >/dev/null 2>&1 || exit 127; exec comment-checker',
+  ])
+  return fromDirenv === 127 ? undefined : fromDirenv
 }
 
-await writeAll(
-  Deno.stderr,
-  new TextEncoder().encode('comment-checker did not run — nothing checked this write.\n'),
-)
-Deno.exit(1)
+const Env = type({
+  CLAUDE_PROJECT_DIR: type('string.trim').pipe(type('string').atLeastLength(1)),
+})
+
+const env = Env({
+  CLAUDE_PROJECT_DIR: Deno.env.get('CLAUDE_PROJECT_DIR') ?? '',
+})
+
+if (env instanceof type.errors) {
+  await report([`CLAUDE_PROJECT_DIR must be set by the hook host\n${env.summary}`, NOT_RUN])
+} else {
+  const code = await checkerExit(env.CLAUDE_PROJECT_DIR)
+  if (code === 0 || code === 2) Deno.exit(code)
+  await report([code === undefined ? NOT_RUN : failed(code)])
+}
