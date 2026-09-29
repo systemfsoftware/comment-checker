@@ -18,6 +18,9 @@ jobs:
           toolchain: stable
           components: clippy, rustfmt
 
+      - name: Deno for the plugin hook tests
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
+
       - name: Cache cargo build
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
