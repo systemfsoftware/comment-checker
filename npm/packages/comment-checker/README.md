@@ -30,7 +30,7 @@ Add the command hook to your project's `.claude/settings.json` or your global `~
         "hooks": [
           {
             "type": "command",
-            "command": "command -v comment-checker >/dev/null 2>&1 && exec comment-checker\nif command -v direnv >/dev/null 2>&1; then\n  direnv exec \"${CLAUDE_PROJECT_DIR:-$PWD}\" comment-checker\n  rc=$?\n  case $rc in 0|2) exit $rc ;; esac\nfi\ncat >/dev/null\necho \"comment-checker did not run — nothing checked this write.\" >&2\nexit 1"
+            "command": "if command -v comment-checker >/dev/null 2>&1; then\n  comment-checker\n  rc=$?\nelif command -v direnv >/dev/null 2>&1; then\n  direnv exec \"${CLAUDE_PROJECT_DIR:-$PWD}\" sh -c 'command -v comment-checker >/dev/null 2>&1 || exit 127; exec comment-checker'\n  rc=$?\nelse\n  rc=127\nfi\ncase $rc in 0|2) exit $rc ;; esac\ncat >/dev/null\nif [ \"$rc\" -eq 127 ]; then\n  echo \"comment-checker did not run — nothing checked this write.\" >&2\nelse\n  echo \"comment-checker failed (exit $rc) — nothing checked this write.\" >&2\nfi\nexit 1"
           }
         ]
       }
@@ -39,7 +39,13 @@ Add the command hook to your project's `.claude/settings.json` or your global `~
 }
 ```
 
-The command runs `comment-checker` from `PATH`, then through `direnv exec` in the project directory for projects whose dev shell provides it. When neither resolves it, the command reads the whole hook payload from stdin, prints `comment-checker did not run — nothing checked this write.` to `stderr`, and exits `1`. The write is reported as unchecked, not silently passed.
+The command runs `comment-checker` from `PATH`, or, when it is not on `PATH`, through `direnv exec` in the project directory for projects whose dev shell provides it. It has three outcomes:
+
+- **Checked**: `comment-checker` ran and exited `0` (clean) or `2` (flagged comments). The hook exits with that code.
+- **Not run**: neither `PATH` nor `direnv` resolves `comment-checker`. The hook reads the whole payload from `stdin`, prints `comment-checker did not run — nothing checked this write.` to `stderr`, and exits `1`.
+- **Failed**: `comment-checker` (or `direnv`) ran but exited with any other code, for example after a crash. The hook reads the rest of the payload from `stdin`, prints `comment-checker failed (exit <code>) — nothing checked this write.` to `stderr`, and exits `1`.
+
+An unchecked write is always reported, never silently passed.
 
 ## How It Works
 

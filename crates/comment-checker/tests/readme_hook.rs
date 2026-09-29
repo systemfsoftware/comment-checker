@@ -9,7 +9,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 
 const README: &str = include_str!("../../../npm/packages/comment-checker/README.md");
-const GUIDANCE: &str = "comment-checker did not run — nothing checked this write.";
+const NOTHING_CHECKED: &str = "nothing checked this write.";
+const NOT_RUN: &str = "comment-checker did not run — nothing checked this write.";
 const CONTENT_LARGER_THAN_ANY_PIPE_BUFFER: usize = 1 << 20;
 
 fn readme_hook_command() -> String {
@@ -70,7 +71,9 @@ impl Sandbox {
         for dir in ["bin", "hidden", "project", "hook-cwd"] {
             fs::create_dir_all(root.join(dir)).expect("create sandbox dir");
         }
-        symlink(host_executable("cat"), root.join("bin/cat")).expect("link cat");
+        for tool in ["cat", "sh"] {
+            symlink(host_executable(tool), root.join("bin").join(tool)).expect("link tool");
+        }
         Self {
             root,
             sh: host_executable("sh"),
@@ -92,9 +95,13 @@ impl Sandbox {
         self.install(dir, "comment-checker", &body);
     }
 
+    fn install_checker_exiting_without_reading_stdin(&self, dir: &str, code: i32) {
+        self.install(dir, "comment-checker", &format!("exit {code}"));
+    }
+
     fn install_direnv_loading_project_env(&self) {
         let body = format!(
-            "[ \"$1\" = exec ] && [ \"$2\" = '{}' ] || exit 99\nshift 2\nPATH='{}':\"$PATH\" exec \"$@\"",
+            "[ \"$1\" = exec ] && [ \"$2\" = '{}' ] || exit 99\nshift 2\nPATH='{}':\"$PATH\"\ncommand -v \"$1\" >/dev/null 2>&1 || {{ echo \"direnv: error command '$1' not found on PATH\" >&2; exit 1; }}\nexec \"$@\"",
             self.root.join("project").display(),
             self.root.join("hidden").display()
         );
@@ -148,20 +155,29 @@ impl Drop for Sandbox {
     }
 }
 
-fn assert_not_run_report(output: &Output, case: &str) {
+fn failed_report(code: i32) -> String {
+    format!("comment-checker failed (exit {code}) — nothing checked this write.")
+}
+
+fn assert_unchecked_report(output: &Output, case: &str, expected: &str) {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(
         output.status.code(),
         Some(1),
         "{case}: the hook must exit 1 when nothing was checked; stderr: {stderr}"
     );
-    assert!(
-        stderr.lines().any(|line| line == GUIDANCE),
-        "{case}: stderr must carry the did-not-run guidance line; got: {stderr}"
+    let reports: Vec<&str> = stderr
+        .lines()
+        .filter(|line| line.ends_with(NOTHING_CHECKED))
+        .collect();
+    assert_eq!(
+        reports,
+        [expected],
+        "{case}: stderr must carry exactly the matching unchecked-write line; got: {stderr}"
     );
 }
 
-fn assert_drains_and_reports(sandbox: &Sandbox, case: &str) {
+fn assert_drains_and_reports(sandbox: &Sandbox, case: &str, expected: &str) {
     let payload = payload();
 
     let (written, output) = sandbox.pipe_from_writer_thread(&payload);
@@ -169,7 +185,7 @@ fn assert_drains_and_reports(sandbox: &Sandbox, case: &str) {
         written.is_ok(),
         "{case}: the hook exited without draining its stdin, so the writer hit {written:?}"
     );
-    assert_not_run_report(&output, case);
+    assert_unchecked_report(&output, case, expected);
 
     let (consumed, output) = sandbox.bytes_read_through_shared_file_offset(&payload);
     assert_eq!(
@@ -177,7 +193,7 @@ fn assert_drains_and_reports(sandbox: &Sandbox, case: &str) {
         payload.len() as u64,
         "{case}: the hook must consume every payload byte"
     );
-    assert_not_run_report(&output, case);
+    assert_unchecked_report(&output, case, expected);
 }
 
 fn assert_runs_checker(sandbox: &Sandbox, dir: &str, code: i32) {
@@ -185,11 +201,15 @@ fn assert_runs_checker(sandbox: &Sandbox, dir: &str, code: i32) {
     sandbox.install_checker_recording_stdin(dir, code);
     let (written, output) = sandbox.pipe_from_writer_thread(&payload);
     assert!(written.is_ok(), "writer hit {written:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(
         output.status.code(),
         Some(code),
-        "the checker's exit code must pass through; stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
+        "the checker's exit code must pass through; stderr: {stderr}"
+    );
+    assert!(
+        !stderr.lines().any(|line| line.ends_with(NOTHING_CHECKED)),
+        "a checker that ran and answered must not be reported as unchecked; stderr: {stderr}"
     );
     assert!(
         fs::read(sandbox.capture()).expect("checker captured stdin") == payload,
@@ -199,11 +219,34 @@ fn assert_runs_checker(sandbox: &Sandbox, dir: &str, code: i32) {
 
 #[test]
 fn readme_hook_drains_payload_and_reports_when_checker_is_on_neither_path_nor_direnv() {
-    assert_drains_and_reports(&Sandbox::new(), "no comment-checker, no direnv");
+    assert_drains_and_reports(&Sandbox::new(), "no comment-checker, no direnv", NOT_RUN);
 
     let sandbox = Sandbox::new();
+    sandbox.install_direnv_loading_project_env();
+    assert_drains_and_reports(&sandbox, "direnv env lacks comment-checker", NOT_RUN);
+}
+
+#[test]
+fn readme_hook_drains_payload_and_reports_failure_when_direnv_fails_before_running_checker() {
+    let sandbox = Sandbox::new();
     sandbox.install_direnv_failing_before_stdin();
-    assert_drains_and_reports(&sandbox, "direnv cannot resolve comment-checker");
+    assert_drains_and_reports(&sandbox, "direnv .envrc blocked", &failed_report(1));
+}
+
+#[test]
+fn readme_hook_drains_payload_and_reports_failure_when_path_checker_exits_without_reading_stdin() {
+    let sandbox = Sandbox::new();
+    sandbox.install_checker_exiting_without_reading_stdin("bin", 101);
+    assert_drains_and_reports(&sandbox, "PATH checker exits 101", &failed_report(101));
+}
+
+#[test]
+fn readme_hook_drains_payload_and_reports_failure_when_direnv_checker_exits_without_reading_stdin()
+{
+    let sandbox = Sandbox::new();
+    sandbox.install_direnv_loading_project_env();
+    sandbox.install_checker_exiting_without_reading_stdin("hidden", 101);
+    assert_drains_and_reports(&sandbox, "direnv checker exits 101", &failed_report(101));
 }
 
 #[test]
