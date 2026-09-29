@@ -29,12 +29,10 @@ fn readme_hook_command() -> String {
                 .collect::<Vec<_>>()
         })
         .collect();
-    assert_eq!(
-        commands.len(),
-        1,
-        "the README must document exactly one PostToolUse command hook, found {commands:?}"
-    );
-    commands.into_iter().next().expect("one command")
+    let [command] = commands.as_slice() else {
+        panic!("the README must document exactly one PostToolUse command hook, found {commands:?}")
+    };
+    command.clone()
 }
 
 fn payload() -> Vec<u8> {
@@ -69,8 +67,9 @@ impl Sandbox {
             std::process::id(),
             SEQ.fetch_add(1, Ordering::Relaxed)
         ));
-        fs::create_dir_all(root.join("bin")).expect("create sandbox bin");
-        fs::create_dir_all(root.join("hidden")).expect("create sandbox hidden bin");
+        for dir in ["bin", "hidden", "project", "hook-cwd"] {
+            fs::create_dir_all(root.join(dir)).expect("create sandbox dir");
+        }
         symlink(host_executable("cat"), root.join("bin/cat")).expect("link cat");
         Self {
             root,
@@ -93,9 +92,10 @@ impl Sandbox {
         self.install(dir, "comment-checker", &body);
     }
 
-    fn install_direnv_loading_hidden_dir(&self) {
+    fn install_direnv_loading_project_env(&self) {
         let body = format!(
-            "[ \"$1\" = exec ] || exit 99\nshift 2\nPATH='{}':\"$PATH\" exec \"$@\"",
+            "[ \"$1\" = exec ] && [ \"$2\" = '{}' ] || exit 99\nshift 2\nPATH='{}':\"$PATH\" exec \"$@\"",
+            self.root.join("project").display(),
             self.root.join("hidden").display()
         );
         self.install("bin", "direnv", &body);
@@ -113,9 +113,10 @@ impl Sandbox {
         let mut cmd = Command::new(&self.sh);
         cmd.arg("-c")
             .arg(readme_hook_command())
-            .current_dir(&self.root)
+            .current_dir(self.root.join("hook-cwd"))
             .env_clear()
             .env("PATH", self.root.join("bin"))
+            .env("CLAUDE_PROJECT_DIR", self.root.join("project"))
             .stdin(stdin)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -216,7 +217,7 @@ fn readme_hook_runs_checker_from_path_with_payload_unchanged_and_exit_passed_thr
 fn readme_hook_runs_checker_through_direnv_with_payload_unchanged_and_exit_passed_through() {
     for code in [0, 2] {
         let sandbox = Sandbox::new();
-        sandbox.install_direnv_loading_hidden_dir();
+        sandbox.install_direnv_loading_project_env();
         assert_runs_checker(&sandbox, "hidden", code);
     }
 }
