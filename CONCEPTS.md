@@ -100,7 +100,7 @@ manifest to it is a deliberate decision, not a default.
 ## Hook gate
 
 ### Silent pass
-A verification mechanism (a hook, a gate, a check) exits success while checking nothing — the failure mode of going green. Distinct from a false negative, which is a wrong verdict on a real check; a silent pass means the check never ran, the input never reached it, or its failure was swallowed. A hook must never claim a check that did not happen: absent checker reads the whole payload and exits with guidance, a flagged write exits with the report, and no surface ends in a blanket success.
+A verification mechanism (a hook, a gate, a check) exits success while checking nothing — the failure mode of going green. Distinct from a false negative, which is a wrong verdict on a real check; a silent pass means the check never ran, the input never reached it, or its failure was swallowed. A hook must never claim a check that did not happen: an absent or failed checker reads the whole payload and exits with guidance, a flagged write exits with the report, and no surface ends in a blanket success.
 *Avoid:* fail-open (reserved for the classifier's deliberate spare)
 
 ## Flagged ambiguities
