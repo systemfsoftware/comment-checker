@@ -59,6 +59,7 @@
         "crates/comment-checker/tests/**"
       ],
       "outputs": [],
+      "passThroughEnv": ["CARGO_MUTANTS_JOBS"],
       "cache": true
     }
   }

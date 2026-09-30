@@ -119,6 +119,12 @@
             pkgs.bubblewrap
             (mkBwrap pkgs (mkCommentChecker pkgs))
           ];
+          # stdenv exports LD_FOR_BUILD, and Deno refuses to spawn under a
+          # scoped --allow-run while any LD_*/DYLD_* var is set, which breaks
+          # every scripts/tools/*.ts that shells out (git, gh, docker, …).
+          shellHook = ''
+            unset LD_FOR_BUILD
+          '';
         };
       });
     };

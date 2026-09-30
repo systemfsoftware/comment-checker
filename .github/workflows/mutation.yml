@@ -62,4 +62,4 @@ jobs:
             pnpm-store-${{ runner.os }}-
 
       - name: Mutation gate via turbo (core classifier, 100%)
-        run: pnpm install --frozen-lockfile && pnpm gate:mutants
+        run: pnpm install --frozen-lockfile && CARGO_MUTANTS_JOBS="$(nproc)" pnpm gate:mutants

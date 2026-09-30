@@ -9,7 +9,7 @@
     "typecheck": "turbo typecheck",
     "lint": "turbo lint",
     "prepare": "husky",
-    "mutants": "cargo mutants --file crates/comment-checker/src/classify.rs --timeout 90",
+    "mutants": "cargo mutants --file crates/comment-checker/src/classify.rs --timeout 90 -j \"${CARGO_MUTANTS_JOBS:-$(( ($(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN) + 1) / 2 ))}\"",
     "gate:mutants": "turbo run //#mutants"
   },
   "devDependencies": {
