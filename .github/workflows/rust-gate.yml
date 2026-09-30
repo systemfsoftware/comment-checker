@@ -18,6 +18,8 @@ jobs:
           toolchain: stable
           components: clippy, rustfmt
 
+      - uses: ./.github/actions/tslp-project-root
+
       - name: Deno for the plugin hook tests
         uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
         with:

@@ -1,0 +1,39 @@
+name: Provision tree-sitter-language-pack parser sources
+description: >
+  Extract the parser-sources bundle for the tree-sitter-language-pack version
+  in Cargo.lock, verified against the release's .sha256 sidecar exactly as the
+  crate's build.rs does, and export PROJECT_ROOT at it. tree-sitter-language-pack
+  1.20.0's build.rs never finds its own OUT_DIR cache when TSLP_LANGUAGES is set,
+  so without this every cargo command re-downloads the bundle and recompiles
+  every grammar.
+
+runs:
+  using: composite
+  steps:
+    - name: Extract verified parser sources and export PROJECT_ROOT
+      shell: bash
+      run: |
+        set -euo pipefail
+        version=$(awk '$0 == "name = \"tree-sitter-language-pack\"" { getline; gsub(/version = |"/, ""); print; exit }' Cargo.lock)
+        if [ -z "$version" ]; then
+          echo "tree-sitter-language-pack is not in Cargo.lock" >&2
+          exit 1
+        fi
+        url="https://github.com/xberg-io/tree-sitter-language-pack/releases/download/v${version}/parser-sources-${version}.tar.zst"
+        bundle="$RUNNER_TEMP/parser-sources-${version}.tar.zst"
+        root="$RUNNER_TEMP/tslp-${version}"
+        curl -fsSL --retry 3 -o "$bundle" "$url"
+        expected=$(curl -fsSL --retry 3 "$url.sha256" | awk '{ print tolower($1); exit }')
+        if ! [[ "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+          echo "malformed sha256 sidecar for $url: $expected" >&2
+          exit 1
+        fi
+        actual=$(sha256sum "$bundle" | awk '{ print $1 }')
+        if [ "$expected" != "$actual" ]; then
+          echo "sha256 mismatch for $url: expected $expected, got $actual" >&2
+          exit 1
+        fi
+        mkdir -p "$root"
+        tar --zstd -xf "$bundle" -C "$root"
+        rm "$bundle"
+        echo "PROJECT_ROOT=$root" >> "$GITHUB_ENV"
