@@ -33,14 +33,23 @@
           # tree-sitter-language-pack's build.rs downloads a parser-sources
           # tarball at compile time; the nix sandbox has no network, so the
           # bundle rides in as a hash-pinned fetchurl (like Cargo.lock —
-          # drift fails the build loudly). Keep the URL version equal to the
-          # tree-sitter-language-pack version in Cargo.lock, and the sha256
+          # drift fails the build loudly). Keep tslpVersion equal to the
+          # tree-sitter-language-pack version in Cargo.lock, and tslpSha256
           # equal to this tarball's real hash. TSLP_SOURCE_BUNDLE_URL also
           # accepts file://, which is how the sandboxed build reads it.
+          tslpVersion = "1.20.0";
+          tslpSha256 = "381b9ed7a781f822e43d3b3c8c5d030e3335f19f9c8eb7015b6a6f35a930ea54";
           tslpParserSources = pkgs.fetchurl {
-            url = "https://github.com/xberg-io/tree-sitter-language-pack/releases/download/v1.20.0/parser-sources-1.20.0.tar.zst";
-            sha256 = "381b9ed7a781f822e43d3b3c8c5d030e3335f19f9c8eb7015b6a6f35a930ea54";
+            url = "https://github.com/xberg-io/tree-sitter-language-pack/releases/download/v${tslpVersion}/parser-sources-${tslpVersion}.tar.zst";
+            sha256 = tslpSha256;
           };
+          # build.rs (as of 1.20.0) refuses a bundle without a `<url>.sha256`
+          # sidecar beside it; write one from the same pinned digest.
+          tslpBundle = pkgs.runCommand "tslp-parser-sources-${tslpVersion}" { } ''
+            mkdir $out
+            ln -s ${tslpParserSources} $out/parser-sources.tar.zst
+            echo ${tslpSha256} > $out/parser-sources.tar.zst.sha256
+          '';
         in rustPlatform.buildRustPackage {
           pname = "comment-checker";
           inherit version;
@@ -57,7 +66,14 @@
           # this derivation; doCheck defaults to true in buildRustPackage and
           # would run the whole suite inside the nix sandbox.
           doCheck = false;
-          TSLP_SOURCE_BUNDLE_URL = "file://${tslpParserSources}";
+          TSLP_SOURCE_BUNDLE_URL = "file://${tslpBundle}/parser-sources.tar.zst";
+          # cargo defaults CARGO_HOME to $HOME/.cargo. Without a sandbox (the
+          # macOS default) nix's HOME=/homeless-shelter is the real host path,
+          # so the build would create it and every later rebuild would fail
+          # nix's purity check. Keep cargo's home inside the build directory.
+          preBuild = ''
+            export HOME="$TMPDIR/home"
+          '';
           meta = with pkgs.lib; {
             description = "Claude Code PostToolUse hook that flags unnecessary comments";
             homepage = "https://github.com/systemfsoftware/comment-checker";
