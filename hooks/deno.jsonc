@@ -1,9 +1,7 @@
 {
   "lock": "./deno.lock",
   "imports": {
-    "@std/fs": "jsr:@std/fs@1.0.24",
     "@std/io": "jsr:@std/io@0.225.3",
-    "@std/path": "jsr:@std/path@1.1.6",
     "arktype": "npm:arktype@2.2.5"
   }
 }
