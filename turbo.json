@@ -59,7 +59,7 @@
         "crates/comment-checker/tests/**"
       ],
       "outputs": [],
-      "passThroughEnv": ["CARGO_MUTANTS_JOBS"],
+      "passThroughEnv": ["CARGO_MUTANTS_JOBS", "XDG_CACHE_HOME", "DENO_DIR"],
       "cache": true
     }
   }
