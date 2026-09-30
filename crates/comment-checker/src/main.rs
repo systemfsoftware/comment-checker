@@ -67,13 +67,13 @@ fn run_strip(input: &str, prompt: &str) -> ExitCode {
         }
         Outcome::Block { findings, .. } => {
             let plan = plan_strip(&on_disk, &findings);
-            if plan.changed() {
-                if let Err(err) = std::fs::write(file_path, &plan.source) {
-                    emit_to_model(&format!(
-                        "comment-checker --strip could not write {file_path}: {err}\n"
-                    ));
-                    return ExitCode::from(2);
-                }
+            if plan.changed()
+                && let Err(err) = std::fs::write(file_path, &plan.source)
+            {
+                emit_to_model(&format!(
+                    "comment-checker --strip could not write {file_path}: {err}\n"
+                ));
+                return ExitCode::from(2);
             }
             let remaining = match check_source(file_path, &plan.source, prompt) {
                 Outcome::Pass { .. } => Vec::new(),

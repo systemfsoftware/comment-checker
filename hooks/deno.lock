@@ -1,21 +1,17 @@
 {
   "version": "5",
   "specifiers": {
-    "jsr:@std/fs@1.0.19": "1.0.19",
     "jsr:@std/internal@^1.0.14": "1.0.14",
-    "jsr:@std/io@0.225.2": "0.225.2",
+    "jsr:@std/io@0.225.3": "0.225.3",
     "jsr:@std/path@1.1.6": "1.1.6",
-    "npm:arktype@2.2.3": "2.2.3"
+    "npm:arktype@2.2.5": "2.2.5"
   },
   "jsr": {
-    "@std/fs@1.0.19": {
-      "integrity": "051968c2b1eae4d2ea9f79a08a3845740ef6af10356aff43d3e2ef11ed09fb06"
-    },
     "@std/internal@1.0.14": {
       "integrity": "291516b3d4c35024d6ffbc0a9df5bf4c64116e05b50012cf846710152d2ffdf7"
     },
-    "@std/io@0.225.2": {
-      "integrity": "3c740cd4ee4c082e6cfc86458f47e2ab7cb353dc6234d5e9b1f91a2de5f4d6c7"
+    "@std/io@0.225.3": {
+      "integrity": "27b07b591384d12d7b568f39e61dff966b8230559122df1e9fd11cc068f7ddd1"
     },
     "@std/path@1.1.6": {
       "integrity": "c68485c2a4dfbb5ae3cc74fae4e8c4e5d874cf8a8ed12927917235c758b46cbe",
@@ -25,23 +21,23 @@
     }
   },
   "npm": {
-    "@ark/schema@0.56.2": {
-      "integrity": "sha512-Qx4D2JFbBWpntiHZaTv7bGG4H/M2rigiknezKg/WVyDSaLdE4YCcWAOoFB7pjjDqHbbV2OqRfntm1nnXvwMexg==",
+    "@ark/schema@0.56.4": {
+      "integrity": "sha512-nd4OqaWdKZJeGF5zNmZysDQO7NyyJ1ycl4S7i16Hj1VxqL+x72Z66lOn7ErpsoMUZtCtslAMHMjqJhuQSxciyw==",
       "dependencies": [
         "@ark/util"
       ]
     },
-    "@ark/util@0.56.2": {
-      "integrity": "sha512-9kU2sUE38FZEGG7l3hamYMBieLYEJh2L1mrYD2eXpT+78EnQSV1bhjxJhnxGBMSTbtwpBSDNSK+K60WvaI/DTQ=="
+    "@ark/util@0.56.4": {
+      "integrity": "sha512-KKqwGSia44cvuuDY70jGfbiUdG2E8F2cM4npdqvJ22S5a0LknlwG6nIrfQG1nF8fzxpzP30098wp0a8ASs0prQ=="
     },
-    "arkregex@0.0.8": {
-      "integrity": "sha512-PJcx6G1kQTgLKPUbeYlYecDRaKq15AMSGVajlKFYWlPeJRQL+j3dKE6tyMs40HZ99djS1l9Vhl3ezAHy9JBIqQ==",
+    "arkregex@0.0.10": {
+      "integrity": "sha512-+iDWBYBjH8w7wqEv8VY4loBwRldFxX84KNwKbobH3FJPay/18XI9sTesmXYpKyIrgbC5z/s16+vSJYHCC9FEvQ==",
       "dependencies": [
         "@ark/util"
       ]
     },
-    "arktype@2.2.3": {
-      "integrity": "sha512-7W+0RLTUNJiBFIIZXwOQxSR8Z273IAd6IvqBeG9+gHnQKFsIx2C0iOtGTmMrPnlX4qLXyc5+ll7A0BIj9WrbTg==",
+    "arktype@2.2.5": {
+      "integrity": "sha512-c9oqY1eBab2LceqvpWX50xae2HB8P/nJPxRhuhPVf5lEDi3WQpf7WQflJFMsyCiA3NGh6zENOlse30gWBzlwDg==",
       "dependencies": [
         "@ark/schema",
         "@ark/util",
@@ -51,10 +47,10 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@std/fs@1.0.19",
-      "jsr:@std/io@0.225.2",
+      "jsr:@std/fs@1.0.24",
+      "jsr:@std/io@0.225.3",
       "jsr:@std/path@1.1.6",
-      "npm:arktype@2.2.3"
+      "npm:arktype@2.2.5"
     ]
   }
 }

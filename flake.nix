@@ -38,8 +38,8 @@
           # equal to this tarball's real hash. TSLP_SOURCE_BUNDLE_URL also
           # accepts file://, which is how the sandboxed build reads it.
           tslpParserSources = pkgs.fetchurl {
-            url = "https://github.com/xberg-io/tree-sitter-language-pack/releases/download/v1.14.3/parser-sources-1.14.3.tar.zst";
-            sha256 = "f13bcf0be1b9a99c45ead43671ae311346c2a10807c3fdc7c76407445ea7f2c7";
+            url = "https://github.com/xberg-io/tree-sitter-language-pack/releases/download/v1.20.0/parser-sources-1.20.0.tar.zst";
+            sha256 = "381b9ed7a781f822e43d3b3c8c5d030e3335f19f9c8eb7015b6a6f35a930ea54";
           };
         in rustPlatform.buildRustPackage {
           pname = "comment-checker";

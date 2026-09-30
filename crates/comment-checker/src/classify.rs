@@ -232,13 +232,12 @@ fn restate_with_tokens(adjacent: &str, comment_tokens: &[String]) -> RestateEvid
         if adjacent_tokens.contains(token) {
             lexical.push(token.clone());
         }
-        if let Some((_, ops)) = OPERATOR_TABLE.iter().find(|(verb, _)| verb == token) {
-            if let Some(op) = ops
+        if let Some((_, ops)) = OPERATOR_TABLE.iter().find(|(verb, _)| verb == token)
+            && let Some(op) = ops
                 .iter()
                 .find(|op| code_contains_operator(adjacent, &adjacent_tokens, op))
-            {
-                operator.push((token.clone(), (*op).to_owned()));
-            }
+        {
+            operator.push((token.clone(), (*op).to_owned()));
         }
     }
 
