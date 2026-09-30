@@ -75,7 +75,7 @@ pnpm mutants
 
 **Rust/Cargo specifics for manifest resolution**: Commands are direct `cargo` invocations (Cargo.toml serves as manifest), except mutation: `pnpm mutants` wraps `cargo mutants --file crates/comment-checker/src/classify.rs --timeout 90` so its concurrency policy lives in one place. The gate resolves via the Cargo toolchain present in PATH. The instructions surface names these as the verifiable entrypoints.
 
-Run checks using full system concurrency (`cargo` and `cargo-test` use host CPU defaults). Mutation is the exception: half the host CPUs locally, all of them in CI (`CARGO_MUTANTS_JOBS`).
+Run checks using full system concurrency (`cargo` and `cargo-test` use host CPU defaults). Mutation is the exception: builds are capped at half the host CPUs locally and use all of them in CI, through cargo-mutants' jobserver (`CARGO_MUTANTS_JOBSERVER_TASKS`). Two mutants run at once everywhere (`CARGO_MUTANTS_JOBS`), which measured faster than more.
 Add a phase only when the check gating it is far cheaper than the phase behind it; never chain independent same-cost checks with `&&`.
 ### Anti-Bypass Rules
 - Run the full one-shot command, not individual tests in isolation.

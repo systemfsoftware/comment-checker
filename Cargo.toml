@@ -28,3 +28,7 @@ lto = "fat"
 codegen-units = 1
 strip = "symbols"
 panic = "abort"
+
+[profile.mutants]
+inherits = "test"
+debug = "none"

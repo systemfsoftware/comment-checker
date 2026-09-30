@@ -10,12 +10,16 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      CARGO_MUTANTS_VERSION: 27.1.0
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions-rust-lang/setup-rust-toolchain@0267444136ce4919088f5eae0461f736f21356de # v1
         with:
           toolchain: stable
+
+      - uses: ./.github/actions/tslp-project-root
 
       - uses: ./.github/actions/setup-pnpm-node
 
@@ -30,16 +34,25 @@ jobs:
       - name: direnv for the real-direnv test
         run: sudo apt-get update && sudo apt-get install -y direnv
 
+      - name: Cache cargo-mutants binary
+        id: cargo-mutants-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/bin/cargo-mutants
+          key: cargo-mutants-${{ env.CARGO_MUTANTS_VERSION }}-${{ runner.os }}
+
       - name: Install cargo-mutants subcommand
-        run: |
-          cargo install cargo-mutants
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+        if: steps.cargo-mutants-cache.outputs.cache-hit != 'true'
+        run: cargo install --locked "cargo-mutants@$CARGO_MUTANTS_VERSION"
+
+      - name: Put cargo-mutants on PATH
+        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Cache turbo verdicts
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.toml', 'Cargo.lock', '.cargo/config.toml', 'crates/comment-checker/**', 'package.json', 'turbo.json') }}
+          key: turbo-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.toml', 'Cargo.lock', '.cargo/config.toml', '.cargo/mutants.toml', 'crates/comment-checker/**', 'package.json', 'turbo.json') }}
           restore-keys: |
             turbo-${{ runner.os }}-
 
@@ -62,4 +75,4 @@ jobs:
             pnpm-store-${{ runner.os }}-
 
       - name: Mutation gate via turbo (core classifier, 100%)
-        run: pnpm install --frozen-lockfile && CARGO_MUTANTS_JOBS="$(nproc)" pnpm gate:mutants
+        run: pnpm install --frozen-lockfile && CARGO_MUTANTS_JOBSERVER_TASKS="$(nproc)" pnpm gate:mutants
