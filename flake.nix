@@ -21,7 +21,7 @@
                 overlays = [ (import rust-overlay) ];
               };
             in f pkgs);
-      version = "0.3.5";
+      version = "0.3.6";
       # tree-sitter-language-pack's build.rs downloads a parser-sources
       # tarball at compile time; the nix sandbox has no network, so the
       # bundle rides in as a hash-pinned fetchurl (like Cargo.lock —
