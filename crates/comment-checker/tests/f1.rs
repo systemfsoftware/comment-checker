@@ -168,7 +168,7 @@ fn malformed_corpus_fails_loudly() {
 fn zero_case_kind_reports_gracefully() {
     let report = evaluate(&[], &[]);
     assert!(report.by_kind.is_empty());
-    assert!(per_kind_violations(&report, &[]).is_empty());
+    assert_eq!(per_kind_violations(&report, &[]), Vec::<String>::new());
 }
 
 /// The per-kind floor must trip on a kind-level regression even when the

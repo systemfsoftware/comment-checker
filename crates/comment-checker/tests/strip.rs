@@ -95,7 +95,7 @@ fn strip_deletes_a_whole_line_comment_and_keeps_the_code() {
     assert!(run.stderr.contains("Deleted 1 comment(s)"));
     assert!(run.stderr.contains("Do this: rename the identifiers"));
     assert!(!run.stderr.contains("Action: delete the flagged comments"));
-    assert!(run.stdout.is_empty());
+    assert_eq!(run.stdout, "");
 }
 
 #[test]
@@ -124,7 +124,7 @@ fn strip_on_a_clean_file_is_silent() {
     let run = run_binary(&write_payload(&file.path, CLEAN), &["--strip"]);
     assert!(run.status.success());
     assert_eq!(file.read(), CLEAN);
-    assert!(run.stderr.is_empty());
+    assert_eq!(run.stderr, "");
 }
 
 #[test]

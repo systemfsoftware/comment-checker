@@ -128,7 +128,7 @@ mod tests {
         );
         assert_eq!(plan.source, "def load(path):\n    return path\n");
         assert_eq!(plan.deleted.len(), 1);
-        assert!(plan.remaining.is_empty());
+        assert_eq!(plan.remaining, Vec::<Finding>::new());
     }
 
     #[test]
@@ -143,7 +143,7 @@ mod tests {
             )],
         );
         assert_eq!(plan.source, source);
-        assert!(plan.deleted.is_empty());
+        assert_eq!(plan.deleted, Vec::<Finding>::new());
         assert_eq!(plan.remaining.len(), 1);
     }
 
@@ -152,7 +152,7 @@ mod tests {
         let source = "x = 1  # TODO: fix this later\n";
         let plan = plan_strip(source, &[finding(1, "# TODO: fix this later", None)]);
         assert_eq!(plan.source, source);
-        assert!(plan.deleted.is_empty());
+        assert_eq!(plan.deleted, Vec::<Finding>::new());
     }
 
     #[test]
@@ -160,7 +160,7 @@ mod tests {
         let source = "#!/usr/bin/env python3\nx = 1\n";
         let plan = plan_strip(source, &[finding(1, "#!/usr/bin/env python3", None)]);
         assert_eq!(plan.source, source);
-        assert!(plan.deleted.is_empty());
+        assert_eq!(plan.deleted, Vec::<Finding>::new());
     }
 
     #[test]
