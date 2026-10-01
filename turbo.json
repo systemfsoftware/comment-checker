@@ -54,11 +54,13 @@
         "Cargo.toml",
         "Cargo.lock",
         ".cargo/config.toml",
+        ".cargo/mutants.toml",
         "crates/comment-checker/Cargo.toml",
         "crates/comment-checker/src/**",
         "crates/comment-checker/tests/**"
       ],
       "outputs": [],
+      "passThroughEnv": ["CARGO_MUTANTS_JOBS", "CARGO_MUTANTS_JOBSERVER_TASKS", "XDG_CACHE_HOME", "DENO_DIR", "PROJECT_ROOT"],
       "cache": true
     }
   }

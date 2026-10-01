@@ -2,8 +2,8 @@
 import { createRequire } from "node:module"
 import { Data, Effect, Option, Path, Runtime } from "effect"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { Command, Flag } from "effect/unstable/cli"
+import { ChildProcess, ChildProcessSpawner } from "effect/process"
+import { Command, Flag } from "effect/cli"
 import { binaryFileName, optionalDepName } from "./platform.js"
 
 const require = createRequire(import.meta.url)
@@ -48,7 +48,7 @@ const getBinaryPath = Effect.gen(function* () {
 const command = Command.make(
   "comment-checker",
   {
-    prompt: Flag.optional(Flag.string("prompt")),
+    prompt: Flag.optional(Flag.String("prompt")),
   },
   (config) =>
     Effect.gen(function* () {

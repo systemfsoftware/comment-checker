@@ -61,7 +61,7 @@ These are the checks that must pass. The one-shot gate below runs them as phases
 - `cargo fmt --check`
 - `cargo clippy --all-targets -- -D warnings`
 - `cargo test --all-targets`
-- Core classifier mutation (when changing `crates/comment-checker/src/classify.rs`): `cargo mutants --file crates/comment-checker/src/classify.rs --timeout 90`
+- Core classifier mutation (when changing `crates/comment-checker/src/classify.rs`): `pnpm mutants`
 
 ```bash
 # One-shot verification command
@@ -70,17 +70,17 @@ cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test --a
 
 **For classifier changes**, the mutants command above must be run:
 ```bash
-cargo mutants --file crates/comment-checker/src/classify.rs --timeout 90
+pnpm mutants
 ```
 
-**Rust/Cargo specifics for manifest resolution**: Commands are direct `cargo` invocations (Cargo.toml serves as manifest; no `[scripts]` like package.json). The gate resolves via the Cargo toolchain present in PATH. The instructions surface names these as the verifiable entrypoints.
+**Rust/Cargo specifics for manifest resolution**: Commands are direct `cargo` invocations (Cargo.toml serves as manifest), except mutation: `pnpm mutants` wraps `cargo mutants --file crates/comment-checker/src/classify.rs --timeout 90` so its concurrency policy lives in one place. The gate resolves via the Cargo toolchain present in PATH. The instructions surface names these as the verifiable entrypoints.
 
-Run checks using full system concurrency (`cargo` and `cargo-test` use host CPU defaults).
+Run checks using full system concurrency (`cargo` and `cargo-test` use host CPU defaults). Mutation is the exception: builds are capped at half the host CPUs locally and use all of them in CI, through cargo-mutants' jobserver (`CARGO_MUTANTS_JOBSERVER_TASKS`). Two mutants run at once everywhere (`CARGO_MUTANTS_JOBS`), which measured faster than more.
 Add a phase only when the check gating it is far cheaper than the phase behind it; never chain independent same-cost checks with `&&`.
 ### Anti-Bypass Rules
 - Run the full one-shot command, not individual tests in isolation.
 - Evidence comes from the current run — never an old CI result or prior session; any failure blocks done, even unrelated-looking ones.
-- Never widen the gate's concurrency to make it finish faster; an oversubscribed run is not a passing run.
+- Never widen the gate's concurrency beyond its configured setting to make it finish faster; an oversubscribed run is not a passing run.
 - Never suppress, skip, or disable checks, or cherry-pick passing tests, to make verification pass.
 - Never edit this file or any gate to approve your own work.
 
@@ -147,9 +147,20 @@ cargo fmt --check && \
 cargo clippy --all-targets -- -D warnings && \
 cargo test --all-targets
 ```
-Core classifier mutation (when changing `crates/comment-checker/src/classify.rs`): `cargo mutants --file crates/comment-checker/src/classify.rs --timeout 90`
+Core classifier mutation (when changing `crates/comment-checker/src/classify.rs`): `pnpm mutants`
 **For classifier changes** add the mutants step above.
 
-**Rust/Cargo specifics for manifest resolution**: Commands are direct `cargo` invocations (Cargo.toml serves as manifest; no `[scripts]` like package.json). The gate resolves via the Cargo toolchain present in PATH. The instructions surface names these as the verifiable entrypoints.
+**Rust/Cargo specifics for manifest resolution**: Commands are direct `cargo` invocations (Cargo.toml serves as manifest), except mutation: `pnpm mutants` wraps `cargo mutants --file crates/comment-checker/src/classify.rs --timeout 90` so its concurrency policy lives in one place. The gate resolves via the Cargo toolchain present in PATH. The instructions surface names these as the verifiable entrypoints.
 
 This harness was bootstrapped from the template after subtraction audit (no prior instruction files existed). All rules passed the earn test or escalation order.
+
+<!-- BEGIN:turborepo-agent-rules -->
+
+# This is NOT the Turborepo you know
+
+Turborepo configuration, task behavior, and CLI commands can vary between installed versions and may differ from your training data. Resolve the `turbo` package from this file's directory or relevant workspace; in monorepos, it may not be visible from the repository root. For example, run `node -p "require.resolve('turbo/package.json')"` from a workspace that depends on `turbo`.
+
+Read `docs/README.md` inside that installed package first, then read the relevant pages from its `docs/` directory before changing Turborepo configuration or commands. Heed deprecation notices. These bundled docs match the installed package version and are available without network access.
+
+This block is written and re-added by `turbo` before repository-scoped commands when an AI agent is detected. In the Turborepo source repository, its template is defined in `crates/turborepo-cli/src/cli/agent_guidance.rs`. Removing the managed block while updates are enabled means a later qualifying invocation will add it again. Set `"agentGuidance": false` in the root `turbo.json` or `turbo.jsonc` to opt out; this does not remove an existing block. Keep the block committed with your work to avoid an uncommitted change on the next agent invocation.
+<!-- END:turborepo-agent-rules -->

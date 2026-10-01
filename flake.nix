@@ -22,6 +22,19 @@
               };
             in f pkgs);
       version = "0.3.5";
+      # tree-sitter-language-pack's build.rs downloads a parser-sources
+      # tarball at compile time; the nix sandbox has no network, so the
+      # bundle rides in as a hash-pinned fetchurl (like Cargo.lock —
+      # drift fails the build loudly). Keep tslpVersion equal to the
+      # tree-sitter-language-pack version in Cargo.lock, and tslpSha256
+      # equal to this tarball's real hash. TSLP_SOURCE_BUNDLE_URL also
+      # accepts file://, which is how the sandboxed build reads it.
+      tslpVersion = "1.20.0";
+      tslpSha256 = "381b9ed7a781f822e43d3b3c8c5d030e3335f19f9c8eb7015b6a6f35a930ea54";
+      tslpParserSources = pkgs: pkgs.fetchurl {
+        url = "https://github.com/xberg-io/tree-sitter-language-pack/releases/download/v${tslpVersion}/parser-sources-${tslpVersion}.tar.zst";
+        sha256 = tslpSha256;
+      };
       # Source build: no fetchurl of the released *binary*, so no binary hash
       # to go stale (that fixed-output caching was the #81 failure).
       #
@@ -30,17 +43,13 @@
         let
           toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
           rustPlatform = pkgs.makeRustPlatform { cargo = toolchain; rustc = toolchain; };
-          # tree-sitter-language-pack's build.rs downloads a parser-sources
-          # tarball at compile time; the nix sandbox has no network, so the
-          # bundle rides in as a hash-pinned fetchurl (like Cargo.lock —
-          # drift fails the build loudly). Keep the URL version equal to the
-          # tree-sitter-language-pack version in Cargo.lock, and the sha256
-          # equal to this tarball's real hash. TSLP_SOURCE_BUNDLE_URL also
-          # accepts file://, which is how the sandboxed build reads it.
-          tslpParserSources = pkgs.fetchurl {
-            url = "https://github.com/xberg-io/tree-sitter-language-pack/releases/download/v1.14.3/parser-sources-1.14.3.tar.zst";
-            sha256 = "f13bcf0be1b9a99c45ead43671ae311346c2a10807c3fdc7c76407445ea7f2c7";
-          };
+          # build.rs (as of 1.20.0) refuses a bundle without a `<url>.sha256`
+          # sidecar beside it; write one from the same pinned digest.
+          tslpBundle = pkgs.runCommand "tslp-parser-sources-${tslpVersion}" { } ''
+            mkdir $out
+            ln -s ${tslpParserSources pkgs} $out/parser-sources.tar.zst
+            echo ${tslpSha256} > $out/parser-sources.tar.zst.sha256
+          '';
         in rustPlatform.buildRustPackage {
           pname = "comment-checker";
           inherit version;
@@ -57,7 +66,14 @@
           # this derivation; doCheck defaults to true in buildRustPackage and
           # would run the whole suite inside the nix sandbox.
           doCheck = false;
-          TSLP_SOURCE_BUNDLE_URL = "file://${tslpParserSources}";
+          TSLP_SOURCE_BUNDLE_URL = "file://${tslpBundle}/parser-sources.tar.zst";
+          # cargo defaults CARGO_HOME to $HOME/.cargo. Without a sandbox (the
+          # macOS default) nix's HOME=/homeless-shelter is the real host path,
+          # so the build would create it and every later rebuild would fail
+          # nix's purity check. Keep cargo's home inside the build directory.
+          preBuild = ''
+            export HOME="$TMPDIR/home"
+          '';
           meta = with pkgs.lib; {
             description = "Claude Code PostToolUse hook that flags unnecessary comments";
             homepage = "https://github.com/systemfsoftware/comment-checker";
@@ -101,8 +117,36 @@
             pkgs.nodejs
             pkgs.pnpm
             pkgs.bubblewrap
+            pkgs.zstd
             (mkBwrap pkgs (mkCommentChecker pkgs))
           ];
+          # stdenv exports LD_FOR_BUILD, and Deno refuses to spawn under a
+          # scoped --allow-run while any LD_*/DYLD_* var is set, which breaks
+          # every scripts/tools/*.ts that shells out (git, gh, docker, …).
+          #
+          # tree-sitter-language-pack 1.20.0's build.rs never finds its own
+          # OUT_DIR cache when TSLP_LANGUAGES is set, so it re-downloads and
+          # re-extracts the bundle on every run, which marks it dirty again:
+          # every cargo command recompiles all grammars. A pre-extracted
+          # bundle at PROJECT_ROOT short-circuits that. Export it only when
+          # Cargo.lock names the pinned version: a stale PROJECT_ROOT would
+          # compile another release's grammar sources without complaint.
+          shellHook = ''
+            unset LD_FOR_BUILD
+            unset PROJECT_ROOT
+            tslp_locked=$(awk '$0 == "name = \"tree-sitter-language-pack\"" { getline; gsub(/version = |"/, ""); print; exit }' Cargo.lock 2>/dev/null)
+            if [ "$tslp_locked" = "${tslpVersion}" ]; then
+              tslp_root="''${XDG_CACHE_HOME:-$HOME/.cache}/comment-checker/tslp-${tslpVersion}"
+              if [ ! -f "$tslp_root/parsers/python/src/parser.c" ]; then
+                rm -rf "$tslp_root.tmp" && mkdir -p "$tslp_root.tmp" \
+                  && tar --zstd -xf ${tslpParserSources pkgs} -C "$tslp_root.tmp" \
+                  && rm -rf "$tslp_root" && mv "$tslp_root.tmp" "$tslp_root"
+              fi
+              [ -f "$tslp_root/parsers/python/src/parser.c" ] && export PROJECT_ROOT="$tslp_root"
+            else
+              echo "comment-checker devShell: Cargo.lock has tree-sitter-language-pack ''${tslp_locked:-?}, flake.nix pins ${tslpVersion}; grammar builds fall back to per-build downloads" >&2
+            fi
+          '';
         };
       });
     };

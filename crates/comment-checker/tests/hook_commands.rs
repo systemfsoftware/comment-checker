@@ -245,7 +245,7 @@ impl Sandbox {
         if self.project_dir_set {
             cmd.env("CLAUDE_PROJECT_DIR", self.root.join("project"));
         }
-        for deno_cache in ["HOME", "DENO_DIR"] {
+        for deno_cache in ["HOME", "XDG_CACHE_HOME", "DENO_DIR"] {
             if let Some(value) = std::env::var_os(deno_cache) {
                 cmd.env(deno_cache, value);
             }
