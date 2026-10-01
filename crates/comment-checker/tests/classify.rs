@@ -744,7 +744,7 @@ fn restate_cites_lexical_overlap() {
         panic!("expected RestatesCode, got {classify:?}");
     };
     assert_eq!(evidence.lexical, vec!["counter".to_owned()]);
-    assert!(evidence.operator.is_empty());
+    assert_eq!(evidence.operator, Vec::<(String, String)>::new());
 }
 
 #[test]
@@ -783,7 +783,7 @@ fn restate_matches_operator_even_without_lexical_overlap() {
     else {
         panic!("expected RestatesCode, got {classify:?}");
     };
-    assert!(evidence.lexical.is_empty());
+    assert_eq!(evidence.lexical, Vec::<String>::new());
     assert_eq!(
         evidence.operator,
         vec![("decrements".to_owned(), "-=".to_owned())]
@@ -846,7 +846,7 @@ fn restates_signature_with_lexical_evidence() {
         panic!("expected RestatesCode, got {classify:?}");
     };
     assert_eq!(evidence.lexical, vec!["user".to_owned()]);
-    assert!(evidence.operator.is_empty());
+    assert_eq!(evidence.operator, Vec::<(String, String)>::new());
 }
 
 #[test]
