@@ -8,10 +8,6 @@ inputs:
     description: Node version
     required: false
     default: '24'
-  registry-url:
-    description: npm registry URL for setup-node; omit when empty
-    required: false
-    default: ''
 
 runs:
   using: composite
@@ -21,14 +17,6 @@ runs:
         version: 11.21.0
 
     - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-      if: inputs.registry-url == ''
       with:
         node-version: ${{ inputs.node-version }}
-        cache: pnpm
-
-    - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-      if: inputs.registry-url != ''
-      with:
-        node-version: ${{ inputs.node-version }}
-        registry-url: ${{ inputs.registry-url }}
         cache: pnpm

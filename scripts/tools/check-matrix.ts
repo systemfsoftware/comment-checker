@@ -7,7 +7,6 @@ import {
   LAUNCHER_MANIFEST_PATH,
   type LauncherManifest,
   PLATFORM_WORKFLOW_PATH,
-  RELEASE_WORKFLOW_PATH,
   type Target,
   TARGETS_PATH,
 } from '../lib/shared.ts'
@@ -101,7 +100,7 @@ function checkManifest(manifest: LauncherManifest, targets: Target[]) {
   const declaredNames = Object.keys(manifest.optionalDependencies ?? {})
   if (declaredNames.length === 0) {
     note(
-      'launcher manifest carries no optionalDependencies (pre-publish); sync-root-version.ts injects the five platform pins from targets.json',
+      'launcher manifest carries no optionalDependencies in-tree; the shared release toolchain injects the five platform pins from targets.json when the launcher is packaged',
     )
   } else {
     const missingNames = expectedNames.filter((name) => !declaredNames.includes(name))
@@ -196,7 +195,6 @@ const rawManifest = await readJsonOrExit(manifestPath, 'launcher manifest')
 checkManifest(rawManifest as LauncherManifest, rawTargets as Target[])
 await checkWorkflow(workflowPath, rawTargets as Target[])
 await checkCallerUsesPlatform(CI_WORKFLOW_PATH)
-await checkCallerUsesPlatform(RELEASE_WORKFLOW_PATH)
 
 if (failures.length > 0) {
   for (const reason of failures) {

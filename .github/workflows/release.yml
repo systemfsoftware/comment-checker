@@ -1,168 +1,20 @@
-# Release pipeline. Both phases hang off pushes to master and are selected by
-# repository state, never by a pull-request ref.
-#
-# The publish used to trigger on `pull_request: closed` for the release PR.
-# Merging that PR with branch deletion destroys refs/pull/<n>/merge, so GitHub
-# cancelled the queued run with zero jobs and nothing published -- the trigger
-# was destroyed by the act of merging, silently. plan-release.ts reads durable
-# state instead: pending .changeset intents mean "version", an untagged
-# manifest version means "publish". A half-finished release resumes on the next
-# push because the missing tag still says "publish".
-#
-# Platform build/stage/bundle lives in platform.yml. This file only decides
-# when to call it.
+# Thin caller. The release lifecycle lives in the shared toolchain
+# (systemfsoftware/pnpm-release-management); this file supplies only the trigger
+# and the permissions. The phase decision, the version bump, the tagging and
+# the GitHub Releases all run inside the reusable workflow against release.jsonc.
+# tools-ref pins the toolchain revision the release runs from.
 name: Release
 
 on:
   push:
     branches: [master]
 
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
-
-permissions: {}
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
-  plan:
-    name: plan
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      phase: ${{ steps.plan.outputs.phase }}
-      version: ${{ steps.plan.outputs.version }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
-
-      - id: plan
-        name: Decide release phase from repository state
-        run: ./scripts/tools/plan-release.ts >> "$GITHUB_OUTPUT"
-
-  version:
-    needs: plan
-    if: needs.plan.outputs.phase == 'version'
-    name: version · open release PR
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          # checkout v5 defaults persist-credentials to false; the release PR
-          # branch is pushed with plain git, which needs the stored credential.
-          persist-credentials: true
-
-      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
-
-      - name: Consume pending change intents
-        run: ./scripts/tools/release-version.ts
-
-      - name: Open or update the Release PR
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./scripts/tools/create-or-update-release-pr.ts
-
-  rust-gate:
-    needs: plan
-    if: needs.plan.outputs.phase == 'publish'
-    uses: ./.github/workflows/rust-gate.yml
-    permissions:
-      contents: read
-
-  js-gate:
-    needs: plan
-    if: needs.plan.outputs.phase == 'publish'
-    uses: ./.github/workflows/js-gate.yml
-    permissions:
-      contents: read
-
-  tools:
-    needs: plan
-    if: needs.plan.outputs.phase == 'publish'
-    uses: ./.github/workflows/tools.yml
-    permissions:
-      contents: read
-
-  mutation:
-    needs: plan
-    if: needs.plan.outputs.phase == 'publish'
-    uses: ./.github/workflows/mutation.yml
-    permissions:
-      contents: read
-
   release:
-    needs: [plan, rust-gate, js-gate, tools, mutation]
-    if: needs.plan.outputs.phase == 'publish'
-    uses: ./.github/workflows/platform.yml
+    uses: systemfsoftware/pnpm-release-management/.github/workflows/release.yml@prm/toolchain
     with:
-      mode: release
-    permissions:
-      contents: read
-
-  publish:
-    needs: [plan, release, rust-gate, js-gate, tools, mutation]
-    if: needs.plan.outputs.phase == 'publish'
-    name: publish · oidc · tag
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      id-token: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          # checkout v5 defaults persist-credentials to false; tag-released-packages
-          # pushes tags with plain git, which needs the stored credential.
-          persist-credentials: true
-
-      - uses: ./.github/actions/setup-pnpm-node
-        with:
-          registry-url: https://registry.npmjs.org
-
-      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
-
-      - name: Preflight — every package must already exist on npm
-        run: ./scripts/tools/check-publish.ts --preflight
-
-      - name: Build launcher
-        run: |
-          pnpm install --frozen-lockfile --registry https://registry.npmjs.org
-          pnpm -r build
-
-      - name: Sync root version
-        run: ./scripts/tools/sync-root-version.ts
-
-      - name: Publish root launcher
-        run: pnpm --filter @systemfsoftware/claude-code-comment-checker publish --provenance --access public --no-git-checks
-
-      - name: Download staged platform packages
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: platform-stage-*
-          path: stages
-
-      - name: Publish platform packages
-        run: ./scripts/tools/publish-platform-stages.ts
-
-      - name: Tag released packages
-        run: ./scripts/tools/tag-released-packages.ts
-
-      - name: Download platform artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: release-*
-          path: release-assets
-
-      - name: Create GitHub release with binaries and changelog
-        run: ./scripts/tools/create-github-release.ts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      tools-ref: prm/toolchain

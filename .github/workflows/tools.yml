@@ -11,10 +11,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
-    env:
-      # gh does not read GITHUB_TOKEN; check-versions.ts downloads release
-      # assets via the gh CLI and needs an explicit GH_TOKEN.
-      GH_TOKEN: ${{ github.token }}
     strategy:
       fail-fast: false
       matrix:
@@ -31,18 +27,5 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          out="$(./scripts/tools/plan-release.ts)"
-          printf '%s\n' "$out"
-          grep -q '^phase=' <<<"$out" || {
-            echo "shebang invocation produced no output on ${{ matrix.os }}" >&2
-            exit 1
-          }
-          # Same cwd and argv shape as release.yml publish (minus --dry-run).
-          sync="$(./scripts/tools/sync-root-version.ts --dry-run)"
-          printf '%s\n' "$sync"
-          grep -q '^+++' <<<"$sync" || {
-            echo "sync-root-version produced no unified patch on ${{ matrix.os }}" >&2
-            exit 1
-          }
           ./scripts/tools/check-versions.ts
           ./scripts/tools/check-matrix.ts
