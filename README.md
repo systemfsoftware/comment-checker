@@ -9,11 +9,11 @@
 
 | Workspace / Package | Description |
 |---|---|
-| [`npm/packages/comment-checker`](npm/packages/comment-checker/README.md) | Node/npm distribution launcher package (`@systemfsoftware/claude-code-comment-checker`) |
+| [`npm/packages/comment-checker`](npm/packages/comment-checker/README.md) | Node launcher package (`@systemfsoftware/claude-code-comment-checker`) that resolves and spawns the platform binary |
 | [`crates/comment-checker`](crates/comment-checker) | Rust core classifier engine, parser rules, and native CLI executable |
 | [`.claude/skills/comment-checker-setup`](.claude/skills/comment-checker-setup/SKILL.md) | Harness setup skill and automated diagnostic doctor script |
 | [`tests/`](tests) / [`eval/corpus.json`](eval/corpus.json) | 60-case multi-language classification test suite (F1 ≥ 0.85) |
-| [`.github/workflows/`](.github/workflows) | Multi-platform build matrix, binary packaging, and npm release pipeline |
+| [`.github/workflows/`](.github/workflows) | Multi-platform build matrix, binary packaging, and the git-tag + GitHub Release pipeline (shared release toolchain) |
 
 ## Documentation & Contributing
 

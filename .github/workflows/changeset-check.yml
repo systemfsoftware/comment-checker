@@ -1,0 +1,18 @@
+# Thin caller. A pull request that changes a publishable package must carry a
+# .changeset intent naming it; the shared toolchain
+# (systemfsoftware/pnpm-release-management) enforces that against release.jsonc.
+name: Changeset Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check:
+    uses: systemfsoftware/pnpm-release-management/.github/workflows/changeset-check.yml@prm/toolchain
+    with:
+      tools-ref: prm/toolchain
