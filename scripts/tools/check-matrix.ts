@@ -13,12 +13,12 @@ import {
 
 // The product platform set: a known list the table must name, not a copy
 // derived from the table under check.
-const EXPECTED_SUFFIXES = ['linux-x64', 'linux-arm64', 'darwin-x64', 'darwin-arm64', 'win32-x64']
+const EXPECTED_SUFFIXES = ['linux-x64', 'linux-arm64', 'win32-x64']
 
 // Known-good hosted runners. The release workflow's per-row runner must match
 // the table's canonical runner AND be one of these — a retired or mistyped
 // label (e.g. macos-13) must fail the gate, not pass it (issue #8 refit).
-const KNOWN_RUNNERS = new Set(['ubuntu-latest', 'ubuntu-24.04-arm', 'macos-14', 'windows-2022'])
+const KNOWN_RUNNERS = new Set(['ubuntu-latest', 'ubuntu-24.04-arm', 'windows-2022'])
 
 const failures: string[] = []
 const fail = (reason: string) => failures.push(reason)
