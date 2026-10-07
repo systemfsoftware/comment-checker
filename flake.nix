@@ -11,7 +11,7 @@
 
   outputs = { self, nixpkgs, rust-overlay }:
     let
-      systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+      systems = [ "x86_64-linux" "aarch64-linux" ];
       forAllSystems = f:
         nixpkgs.lib.genAttrs systems
           (system:
@@ -67,8 +67,8 @@
           # would run the whole suite inside the nix sandbox.
           doCheck = false;
           TSLP_SOURCE_BUNDLE_URL = "file://${tslpBundle}/parser-sources.tar.zst";
-          # cargo defaults CARGO_HOME to $HOME/.cargo. Without a sandbox (the
-          # macOS default) nix's HOME=/homeless-shelter is the real host path,
+          # cargo defaults CARGO_HOME to $HOME/.cargo. Without a sandbox
+          # nix's HOME=/homeless-shelter is the real host path,
           # so the build would create it and every later rebuild would fail
           # nix's purity check. Keep cargo's home inside the build directory.
           preBuild = ''
@@ -78,7 +78,7 @@
             description = "Claude Code PostToolUse hook that flags unnecessary comments";
             homepage = "https://github.com/systemfsoftware/comment-checker";
             license = licenses.asl20;
-            platforms = platforms.unix;
+            platforms = platforms.linux;
           };
         };
       mkBwrap = pkgs: commentChecker:

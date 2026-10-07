@@ -100,7 +100,7 @@ function checkManifest(manifest: LauncherManifest, targets: Target[]) {
   const declaredNames = Object.keys(manifest.optionalDependencies ?? {})
   if (declaredNames.length === 0) {
     note(
-      'launcher manifest carries no optionalDependencies in-tree; the shared release toolchain injects the five platform pins from targets.json when the launcher is packaged',
+      'launcher manifest carries no optionalDependencies in-tree; the shared release toolchain injects the three platform pins from targets.json when the launcher is packaged',
     )
   } else {
     const missingNames = expectedNames.filter((name) => !declaredNames.includes(name))
