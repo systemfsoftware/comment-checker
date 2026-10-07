@@ -51,10 +51,10 @@ identity at runtime and spawns the binary — the only package that declares a
 bin.
 
 ### Platform package
-One per os-cpu pair (`-linux-x64`, `-darwin-arm64`, …), generated from
+One per os-cpu pair (`-linux-x64`, `-linux-arm64`, …), generated from
 `scripts/lib/targets.json`: ships only the compiled binary and its
 manifest (`os`/`cpu`/`libc` fields, no `bin`). The launcher's
-`optionalDependencies` pins all five to the release version.
+`optionalDependencies` pins all three to the release version.
 
 The committed launcher manifest never lists these packages as
 `optionalDependencies` — pnpm cannot lock the platform packages

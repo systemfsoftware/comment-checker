@@ -5,7 +5,7 @@
 
 `@systemfsoftware/claude-code-comment-checker` is the npm distribution launcher for `comment-checker`, a standalone `PostToolUse` hook for Claude Code that classifies code comments as justified or unnecessary across 37 programming languages.
 
-It downloads or executes native platform binaries for Linux, macOS, and Windows via optional platform dependencies. Without `--strip`, it never modifies files on disk and performs all parsing and classification offline.
+It downloads or executes native platform binaries for Linux and Windows via optional platform dependencies. Without `--strip`, it never modifies files on disk and performs all parsing and classification offline.
 
 ## Quick Start
 
