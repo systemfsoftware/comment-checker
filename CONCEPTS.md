@@ -42,29 +42,34 @@ A per-kind/precision-recall gate on the corpus that trips when a kind's
 classifier weakens — including a single-case kind that goes wrong — so a
 weakness in one kind cannot hide inside an aggregate F1 score.
 
-## npm distribution
+## Distribution
 
 ### Launcher
-The root npm package (`@systemfsoftware/claude-code-comment-checker`) whose
+The root package (`@systemfsoftware/claude-code-comment-checker`) whose
 `bin` is the `comment-checker` shim. It resolves the host platform package by
 identity at runtime and spawns the binary — the only package that declares a
 bin.
 
 ### Platform package
-One per os-cpu pair (`-linux-x64`, `-darwin-arm64`, …), generated from
+One per os-cpu pair (`-linux-x64`, `-linux-arm64`, …), generated from
 `scripts/lib/targets.json`: ships only the compiled binary and its
 manifest (`os`/`cpu`/`libc` fields, no `bin`). The launcher's
-`optionalDependencies` pins all five to the release version.
+`optionalDependencies` pins all three to the release version.
 
 The committed launcher manifest never lists these packages as
-`optionalDependencies` — pnpm cannot lock unpublished platform packages
-(pnpm#3960), so the pins are injected from the targets table at publish
-time; absence in-tree is expected, not a defect.
+`optionalDependencies` — pnpm cannot lock the platform packages
+(pnpm#3960), so the pins are injected from the targets table when the launcher
+is packaged; absence in-tree is expected, not a defect.
 
-### Release lane
-A matrix row in the release workflow: one platform/arch build, gate, smoke,
-and publish run on its native runner. Platforms publish before the launcher,
-and the release cannot proceed if any lane fails.
+### Release
+Releases run through the shared toolchain
+(`systemfsoftware/pnpm-release-management`), configured by `release.jsonc`: a
+version with no release tag is owed a tag and a GitHub Release, so the phase is
+derived from repository state, not a pull-request ref. Releases through 0.3.6
+are the legacy tags `v<version>` (declared as `legacyTags` in `release.jsonc`);
+every later release is tagged `@systemfsoftware/claude-code-comment-checker@v<version>`.
+Consumers take the package from this repository's own Nix flake (built from
+source) at the tag; nothing is published to a registry.
 
 ## Mutation gate
 

@@ -1,8 +1,8 @@
 # AGENTS.md
 
-A high-quality, mutation-tested Rust implementation of a Claude Code `PostToolUse` hook that classifies code comments as justified or unnecessary. SOTA engineering: 100% mutation on the core classifier, property-based tests, constitution-aligned, with GitHub releases and npm distribution.
+A high-quality, mutation-tested Rust implementation of a Claude Code `PostToolUse` hook that classifies code comments as justified or unnecessary. SOTA engineering: 100% mutation on the core classifier, property-based tests, constitution-aligned, distributed via GitHub Releases and this repository's Nix flake.
 
-The npm distribution layer uses Effect v4 RC. Never install, import, or pin `effect@3.*` in the JS side.
+The JS launcher layer uses Effect v4 RC. Never install, import, or pin `effect@3.*` in the JS side.
 
 ## Directory map
 
@@ -45,7 +45,7 @@ Treat repo files as one of four surfaces; read any, mutate only the assigned cla
 | **Locked** | This file, evaluation scripts, merge policy, release workflows | Read and propose changes, never edit to make verification pass. |
 | **Editable** | Project code (`crates/`, `tests/`), config, Cargo.toml, npm wrapper | Edit freely within the active task. |
 | **Append-only** | `THREAD.md`, experiment logs, rejected ideas, `mutants.out*` artifacts (when tracked) | Append only; never rewrite or delete entries. |
-| **Human-controlled** | Main-branch merge, production deploy, credentials, destructive ops, publishing to npm/GitHub under systemfsoftware | Ask the user before acting. |
+| **Human-controlled** | Main-branch merge, production deploy, credentials, destructive ops, releasing (tags/GitHub Releases) under systemfsoftware | Ask the user before acting. |
 
 ## Definition of Done
 
@@ -119,7 +119,7 @@ Before adding any rule anywhere, run the placement escalation order: (1) delete 
 | Directory | Leaf | Why |
 |-----------|------|-----|
 | `crates/` | no | Rust core governed by root rules and tests |
-| `npm/` | no (governed by root) | npm distribution layer (can contain multiple packages/apps under packages/ or apps/) — simple wrapper today |
+| `npm/` | no (governed by root) | JS launcher layer (can contain multiple packages/apps under packages/ or apps/) — simple wrapper today |
 | `tests/` | no | test harness governed by root verification |
 
 ## Git and Branch Discipline (Project Specific)

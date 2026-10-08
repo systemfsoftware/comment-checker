@@ -7,19 +7,18 @@ import {
   LAUNCHER_MANIFEST_PATH,
   type LauncherManifest,
   PLATFORM_WORKFLOW_PATH,
-  RELEASE_WORKFLOW_PATH,
   type Target,
   TARGETS_PATH,
 } from '../lib/shared.ts'
 
 // The product platform set: a known list the table must name, not a copy
 // derived from the table under check.
-const EXPECTED_SUFFIXES = ['linux-x64', 'linux-arm64', 'darwin-x64', 'darwin-arm64', 'win32-x64']
+const EXPECTED_SUFFIXES = ['linux-x64', 'linux-arm64', 'win32-x64']
 
 // Known-good hosted runners. The release workflow's per-row runner must match
 // the table's canonical runner AND be one of these — a retired or mistyped
 // label (e.g. macos-13) must fail the gate, not pass it (issue #8 refit).
-const KNOWN_RUNNERS = new Set(['ubuntu-latest', 'ubuntu-24.04-arm', 'macos-14', 'windows-2022'])
+const KNOWN_RUNNERS = new Set(['ubuntu-latest', 'ubuntu-24.04-arm', 'windows-2022'])
 
 const failures: string[] = []
 const fail = (reason: string) => failures.push(reason)
@@ -101,7 +100,7 @@ function checkManifest(manifest: LauncherManifest, targets: Target[]) {
   const declaredNames = Object.keys(manifest.optionalDependencies ?? {})
   if (declaredNames.length === 0) {
     note(
-      'launcher manifest carries no optionalDependencies (pre-publish); sync-root-version.ts injects the five platform pins from targets.json',
+      'launcher manifest carries no optionalDependencies in-tree; the shared release toolchain injects the three platform pins from targets.json when the launcher is packaged',
     )
   } else {
     const missingNames = expectedNames.filter((name) => !declaredNames.includes(name))
@@ -196,7 +195,6 @@ const rawManifest = await readJsonOrExit(manifestPath, 'launcher manifest')
 checkManifest(rawManifest as LauncherManifest, rawTargets as Target[])
 await checkWorkflow(workflowPath, rawTargets as Target[])
 await checkCallerUsesPlatform(CI_WORKFLOW_PATH)
-await checkCallerUsesPlatform(RELEASE_WORKFLOW_PATH)
 
 if (failures.length > 0) {
   for (const reason of failures) {

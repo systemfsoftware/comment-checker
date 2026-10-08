@@ -1,0 +1,65 @@
+{
+  // Release configuration for the shared toolchain
+  // (systemfsoftware/pnpm-release-management). The reusable
+  // .github/workflows/release.yml runs that toolchain's apps against this file
+  // on every push to master: pending .changeset intents mean "version" (open
+  // the release PR), an untagged manifest version means "release" (tag it and
+  // cut its GitHub Release), otherwise "none". No registry publish happens —
+  // the package is taken from this repository's own Nix flake at a tag or
+  // revision.
+  "base": "master",
+  "branch": "changeset-release/master",
+  "versioning": {
+    // The version lives in several surfaces; the root package.json owns it and
+    // every other surface is rewritten to match on each bump.
+    "strategy": "surfaces",
+    "manifest": "package.json",
+    "changelog": "CHANGELOG.md",
+    "surfaces": [
+      { "kind": "toml", "header": "[workspace.package]", "path": "Cargo.toml" },
+      { "kind": "json", "path": "npm/packages/comment-checker/package.json" },
+      { "kind": "nix", "path": "flake.nix" },
+    ],
+  },
+  "gate": { "strategy": "turbo", "task": "build" },
+  // Releases up to 0.3.6 were tagged v<version> before this toolchain; it
+  // names every later release <name>@v<version>.
+  "legacyTags": { "tag": "v{version}", "through": "0.3.6" },
+  "distribution": {
+    // The os-cpu platform packages the launcher resolves at runtime. Kept so
+    // the plan and the changeset gate know the full publishable set.
+    "launcherManifest": "npm/packages/comment-checker/package.json",
+    "targets": [
+      {
+        "target": "x86_64-unknown-linux-gnu",
+        "suffix": "linux-x64",
+        "os": "linux",
+        "cpu": "x64",
+        "libc": "glibc",
+        "runner": "ubuntu-latest",
+        "bin": "comment-checker",
+      },
+      {
+        "target": "aarch64-unknown-linux-gnu",
+        "suffix": "linux-arm64",
+        "os": "linux",
+        "cpu": "arm64",
+        "libc": "glibc",
+        "runner": "ubuntu-24.04-arm",
+        "bin": "comment-checker",
+      },
+      {
+        "target": "x86_64-pc-windows-msvc",
+        "suffix": "win32-x64",
+        "os": "win32",
+        "cpu": "x64",
+        "runner": "windows-2022",
+        "bin": "comment-checker.exe",
+      },
+    ],
+  },
+  "pr": {
+    "title": "chore(release): version packages",
+    "body": "Consumes the pending `.changeset/` intents.\n\nMerging tags the released versions and creates GitHub Releases. Distribution is this repository's Nix flake at the tag; nothing is published to a registry.",
+  },
+}
