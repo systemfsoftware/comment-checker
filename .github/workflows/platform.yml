@@ -32,14 +32,6 @@ jobs:
             suffix: linux-arm64
             runner: ubuntu-24.04-arm
             bin: comment-checker
-          - target: x86_64-apple-darwin
-            suffix: darwin-x64
-            runner: macos-14
-            bin: comment-checker
-          - target: aarch64-apple-darwin
-            suffix: darwin-arm64
-            runner: macos-14
-            bin: comment-checker
           - target: x86_64-pc-windows-msvc
             suffix: win32-x64
             runner: windows-2022

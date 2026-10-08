@@ -7,11 +7,14 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # The shared release toolchain. Its own nixpkgs stays its own: the apps it
+    # builds assert the pnpm version its lockfile was resolved with.
+    pnpm-release-management.url = "github:systemfsoftware/pnpm-release-management";
   };
 
-  outputs = { self, nixpkgs, rust-overlay }:
+  outputs = { self, nixpkgs, rust-overlay, pnpm-release-management }:
     let
-      systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+      systems = [ "x86_64-linux" "aarch64-linux" ];
       forAllSystems = f:
         nixpkgs.lib.genAttrs systems
           (system:
@@ -67,8 +70,8 @@
           # would run the whole suite inside the nix sandbox.
           doCheck = false;
           TSLP_SOURCE_BUNDLE_URL = "file://${tslpBundle}/parser-sources.tar.zst";
-          # cargo defaults CARGO_HOME to $HOME/.cargo. Without a sandbox (the
-          # macOS default) nix's HOME=/homeless-shelter is the real host path,
+          # cargo defaults CARGO_HOME to $HOME/.cargo. Without a sandbox
+          # nix's HOME=/homeless-shelter is the real host path,
           # so the build would create it and every later rebuild would fail
           # nix's purity check. Keep cargo's home inside the build directory.
           preBuild = ''
@@ -78,7 +81,7 @@
             description = "Claude Code PostToolUse hook that flags unnecessary comments";
             homepage = "https://github.com/systemfsoftware/comment-checker";
             license = licenses.asl20;
-            platforms = platforms.unix;
+            platforms = platforms.linux;
           };
         };
       mkBwrap = pkgs: commentChecker:
@@ -98,11 +101,20 @@
             -- ${commentChecker}/bin/comment-checker "$@"
         '';
     in {
+      # workspace-tarballs (plus one attribute per public pnpm member) is what
+      # the shared release workflow packs and tags; the pnpm it builds with must
+      # equal package.json's packageManager pin.
       packages = forAllSystems (pkgs:
         let
           unwrapped = mkCommentChecker pkgs;
           wrapped = mkBwrap pkgs unwrapped;
-        in {
+          workspace = pnpm-release-management.lib.mkPnpmWorkspacePackages {
+            inherit pkgs;
+            src = self;
+            pname = "comment-checker";
+            pnpm = pkgs.pnpm_11;
+          };
+        in workspace // {
           comment-checker = unwrapped;
           comment-checker-bwrap = wrapped;
           default = wrapped;
@@ -115,10 +127,13 @@
             pkgs.cargo-mutants
             pkgs.gcc
             pkgs.nodejs
-            pkgs.pnpm
+            pkgs.pnpm_11
             pkgs.bubblewrap
             pkgs.zstd
             (mkBwrap pkgs (mkCommentChecker pkgs))
+            # github-release-management, version-management, changeset-management:
+            # the shared release workflow runs them through `nix develop`.
+            pnpm-release-management.packages.${pkgs.stdenv.hostPlatform.system}.release-tools
           ];
           # stdenv exports LD_FOR_BUILD, and Deno refuses to spawn under a
           # scoped --allow-run while any LD_*/DYLD_* var is set, which breaks
