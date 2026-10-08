@@ -64,10 +64,12 @@ is packaged; absence in-tree is expected, not a defect.
 ### Release
 Releases run through the shared toolchain
 (`systemfsoftware/pnpm-release-management`), configured by `release.jsonc`: a
-version with no `vX.Y.Z` git tag is owed a tag and a GitHub Release, so the
-phase is derived from repository state, not a pull-request ref. Consumers take
-the package from this repository's own Nix flake (built from source) at the
-tag; nothing is published to a registry.
+version with no release tag is owed a tag and a GitHub Release, so the phase is
+derived from repository state, not a pull-request ref. Releases through 0.3.6
+are the legacy tags `v<version>` (declared as `legacyTags` in `release.jsonc`);
+every later release is tagged `@systemfsoftware/claude-code-comment-checker@v<version>`.
+Consumers take the package from this repository's own Nix flake (built from
+source) at the tag; nothing is published to a registry.
 
 ## Mutation gate
 
