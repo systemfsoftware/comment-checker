@@ -29,9 +29,10 @@ jobs:
       - name: Lint GitHub Actions workflows (issue #9)
         run: ./scripts/tools/lint-workflows.ts
 
-      - name: Release scripts lint + matrix agreement (deno)
+      - name: Release scripts lint + matrix agreement + dependency pins (deno)
         run: |
           cd scripts
           deno task lint
           deno check --config ./deno.jsonc tools/*.ts
           deno task check-matrix
+          deno task check-dep-pins

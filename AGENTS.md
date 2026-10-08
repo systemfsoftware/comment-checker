@@ -2,14 +2,14 @@
 
 A high-quality, mutation-tested Rust implementation of a Claude Code `PostToolUse` hook that classifies code comments as justified or unnecessary. SOTA engineering: 100% mutation on the core classifier, property-based tests, constitution-aligned, distributed via GitHub Releases and this repository's Nix flake.
 
-The JS launcher layer uses Effect v4 RC. Never install, import, or pin `effect@3.*` in the JS side.
+The JS launcher layer uses Effect v4. Never install, import, or pin `effect@3.*` in the JS side.
 
 ## Directory map
 
 | Path | What it holds |
 |------|---------------|
 | `crates/` | Rust core (comment-checker crate) |
-| `npm/packages/comment-checker/` | JS/npm wrapper (ESM + Effect v4 RC launcher for the Rust binary) |
+| `npm/packages/comment-checker/` | JS/npm wrapper (ESM + Effect v4 launcher for the Rust binary) |
 | `tests/` | Integration / F1 tests |
 | `eval/` | Evaluation corpus |
 | `.github/workflows/` | CI/release (pnpm + cross-platform Rust) |
