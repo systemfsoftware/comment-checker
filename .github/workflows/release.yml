@@ -1,8 +1,3 @@
-# Thin caller. The release lifecycle lives in the shared toolchain
-# (systemfsoftware/pnpm-release-management); this file supplies only the trigger
-# and the permissions. The phase decision, the version bump, the tagging and
-# the GitHub Releases all run inside the reusable workflow against release.jsonc.
-# tools-ref pins the toolchain revision the release runs from.
 name: Release
 
 on:
@@ -12,9 +7,10 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   release:
     uses: systemfsoftware/pnpm-release-management/.github/workflows/release.yml@main
     with:
-      tools-ref: main
+      ci-workflow: ci.yml

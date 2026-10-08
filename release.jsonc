@@ -22,6 +22,9 @@
     ],
   },
   "gate": { "strategy": "turbo", "task": "build" },
+  // Releases up to 0.3.6 were tagged v<version> before this toolchain; it
+  // names every later release <name>@v<version>.
+  "legacyTags": { "tag": "v{version}", "through": "0.3.6" },
   "distribution": {
     // The os-cpu platform packages the launcher resolves at runtime. Kept so
     // the plan and the changeset gate know the full publishable set.
