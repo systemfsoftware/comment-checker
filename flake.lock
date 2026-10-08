@@ -84,11 +84,11 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1791492087,
-        "narHash": "sha256-rAPEQk4dYoUOE7gsMFO6YJyaxAGz9zPWZwHFwWfUKoI=",
+        "lastModified": 1791493366,
+        "narHash": "sha256-BFpeY9Gnum4KLTxGQZ29weUY/XgYyjq+XfZMYBpenXs=",
         "owner": "systemfsoftware",
         "repo": "pnpm-release-management",
-        "rev": "8e0fcaa56e4857b9b33ab1cc48ab412f54d6f91c",
+        "rev": "a00599e295b3616b3280a4fcfc9ca1ce49bf386f",
         "type": "github"
       },
       "original": {
