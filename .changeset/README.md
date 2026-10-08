@@ -13,7 +13,7 @@ configures the toolchain.
 flowchart TD
   Push[Push to master] --> Plan[release plan]
   Plan -->|Pending .changeset/*.md| Version[phase: version<br/>bump every version surface + write changelogs<br/>Open changeset-release/master PR]
-  Plan -->|Untagged manifest version| Release[phase: release<br/>Tag vX.Y.Z + cut GitHub Release]
+  Plan -->|Untagged manifest version| Release[phase: release<br/>Tag @systemfsoftware/claude-code-comment-checker@vX.Y.Z + cut GitHub Release]
   Plan -->|No intents & version already tagged| None[phase: none<br/>No-op]
 ```
 
@@ -48,8 +48,10 @@ Release automation is state-driven and runs on push to `master`; the phase is
 derived from repository state, not from a pull-request ref:
 
 1. **`phase: version`** — When pending intents exist in `.changeset/`, the toolchain bumps every version surface declared in `release.jsonc`, writes the changelogs, deletes the consumed intents, and creates or updates the release pull request (`changeset-release/master`).
-2. **`phase: release`** — Merging the release PR lands an untagged version on `master`. The next push tags `vX.Y.Z` and creates its GitHub Release from the authored changelog. Distribution is this repository's Nix flake (built from source) at the tag — nothing is published to a registry.
+2. **`phase: release`** — Merging the release PR lands an untagged version on `master`. The next push tags `@systemfsoftware/claude-code-comment-checker@vX.Y.Z` and creates its GitHub Release from the authored changelog. Distribution is this repository's Nix flake (built from source) at the tag — nothing is published to a registry.
 3. **`phase: none`** — When all intents are consumed and the current manifest version is already tagged, the pipeline exits clean with nothing to do.
+
+Releases through 0.3.6 predate the toolchain and are tagged `vX.Y.Z`. `release.jsonc` declares them as `legacyTags` (`v{version}` through `0.3.6`), so the plan counts those versions as released after reading each tag's commit and does not tag them again; every later release uses the `<name>@vX.Y.Z` form.
 
 > [!WARNING]
 > Merging a pull request without an intent leaves the plan at `phase: none`. The changes land on `master` but are never tagged or released.
