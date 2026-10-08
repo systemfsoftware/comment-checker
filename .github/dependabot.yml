@@ -44,7 +44,7 @@ updates:
           - "typescript"
         update-types: ["major"]
 
-  # The published npm wrapper. Effect is pinned to v4 RC -- effect@3 is a
+  # The published npm wrapper. Effect is on v4 -- effect@3 is a
   # deliberate migration the wrapper never makes, so block a stray 3.x pin.
   - package-ecosystem: npm
     directory: "/npm/packages/comment-checker"

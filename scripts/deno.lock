@@ -8,9 +8,9 @@
     "jsr:@std/path@1.1.6": "1.1.6",
     "jsr:@std/toml@1.0.11": "1.0.11",
     "jsr:@std/yaml@1.3.0": "1.3.0",
-    "npm:@effect/platform-deno@4.0.0-rc.118": "4.0.0-rc.118_effect@4.0.0-rc.118",
+    "npm:@effect/platform-deno@4.0.2": "4.0.2_effect@4.0.2",
     "npm:arktype@2.2.5": "2.2.5",
-    "npm:effect@4.0.0-rc.118": "4.0.0-rc.118"
+    "npm:effect@4.0.2": "4.0.2"
   },
   "jsr": {
     "@libs/diff@4.0.1": {
@@ -54,8 +54,8 @@
     "@ark/util@0.56.4": {
       "integrity": "sha512-KKqwGSia44cvuuDY70jGfbiUdG2E8F2cM4npdqvJ22S5a0LknlwG6nIrfQG1nF8fzxpzP30098wp0a8ASs0prQ=="
     },
-    "@effect/platform-deno@4.0.0-rc.118_effect@4.0.0-rc.118": {
-      "integrity": "sha512-BXyJw2PxEtbxPlF3WauhxRzzOc52vl5ct3HSREtJsfGL1JTMMW/uEVZY+81Lfnu3XcLIfyGpJrgGnwWPdgls+Q==",
+    "@effect/platform-deno@4.0.2_effect@4.0.2": {
+      "integrity": "sha512-j/elEyfYiE6X1bojvKg5b11RNQat+kTiew+COFTml/KpoT7iTyU9/MOAw7drjs2n9YT+E49AENoIWz78iyhTkg==",
       "dependencies": [
         "@db/redis@npm:@jsr/db__redis@0.42.0",
         "@effect/platform-node-shared",
@@ -66,8 +66,8 @@
         "effect"
       ]
     },
-    "@effect/platform-node-shared@4.0.0-rc.118_effect@4.0.0-rc.118": {
-      "integrity": "sha512-pNbmIlxbAUxAthUNsp2xm1NLG9kxoYecsPkoYl9mNF2oxPcKDxAvkOar7tYnLSUpXJeATm4pxYVipdZjQfqO4Q==",
+    "@effect/platform-node-shared@4.0.2_effect@4.0.2": {
+      "integrity": "sha512-xn8aDw9p/QUPt1Yi0C3HUMcycT+MjHfAe19FDUDrUuzcwq0xxskkamVSqbdykF/Dsuus4aZTsCBZA/vkhHIfbQ==",
       "dependencies": [
         "@types/ws",
         "effect",
@@ -156,14 +156,14 @@
       ],
       "tarball": "https://npm.jsr.io/~/11/@jsr/std__streams/1.2.0.tgz"
     },
-    "@types/node@26.6.3": {
-      "integrity": "sha512-dsqMQQoeTLqu9wynDD00q573mNzso3IdQOAfHRJqLCcmCFPoGo9A1bDpUcv/9tnKpErQWv9uKeGfl37EIS02Yg==",
+    "@types/node@26.6.4": {
+      "integrity": "sha512-ldVPDCzj7fsaGZrLB0NuHuTvJcsNasysBAqMolr/cgxrLd1xbqxIr3XJiPnHHJUCxj5sNF1vnRj9aWnrVh5Jcg==",
       "dependencies": [
         "undici-types"
       ]
     },
-    "@types/ws@8.18.1": {
-      "integrity": "sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==",
+    "@types/ws@8.18.2": {
+      "integrity": "sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==",
       "dependencies": [
         "@types/node"
       ]
@@ -185,8 +185,8 @@
     "cluster-key-slot@1.1.0": {
       "integrity": "sha512-2Nii8p3RwAPiFwsnZvukotvow2rIHM+yQ6ZcBXGHdniadkYGZYiGmkHJIbZPIV9nfv7m/U1IPMVVcAhoWFeklw=="
     },
-    "effect@4.0.0-rc.118": {
-      "integrity": "sha512-hxhpCd+swzrtu9lnyPpEFre2ODQzJ9qxgyL1oHIEY8NKnW4PxTbM1XzplMZXiAsLD62HO+KJc41Nqxr9T791ZQ=="
+    "effect@4.0.2": {
+      "integrity": "sha512-YeYnLqSFrL4+tCOXRrfNP03w8FILoF/wDl+ukraJAGzXrjcS383W7LAAvGBbLatEyktmLxRq+9xJinx7QzXW5A=="
     },
     "undici-types@8.9.0": {
       "integrity": "sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg=="
@@ -202,9 +202,9 @@
       "jsr:@std/path@1.1.6",
       "jsr:@std/toml@1.0.11",
       "jsr:@std/yaml@1.3.0",
-      "npm:@effect/platform-deno@4.0.0-rc.118",
+      "npm:@effect/platform-deno@4.0.2",
       "npm:arktype@2.2.5",
-      "npm:effect@4.0.0-rc.118"
+      "npm:effect@4.0.2"
     ]
   }
 }

@@ -13,6 +13,8 @@ export const LAUNCHER_MANIFEST_PATH = join(
 export const RELEASE_WORKFLOW_PATH = join(ROOT, '.github', 'workflows', 'release.yml')
 export const CI_WORKFLOW_PATH = join(ROOT, '.github', 'workflows', 'ci.yml')
 export const PLATFORM_WORKFLOW_PATH = join(ROOT, '.github', 'workflows', 'platform.yml')
+export const PNPM_LOCK_PATH = join(ROOT, 'pnpm-lock.yaml')
+export const DEPENDABOT_PATH = join(ROOT, '.github', 'dependabot.yml')
 
 export interface Target {
   target: string
