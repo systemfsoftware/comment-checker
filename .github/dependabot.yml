@@ -57,6 +57,9 @@ updates:
       # typescript majors are deliberate migrations, not routine bumps.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # @types/node tracks the Node 24 LTS line; a newer major is a deliberate move.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
     groups:
       oxlint-minor-patch:
@@ -88,4 +91,5 @@ updates:
         exclude-patterns:
           - "oxlint"
           - "typescript"
+          - "@types/node"
         update-types: ["major"]
