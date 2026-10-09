@@ -26,6 +26,9 @@ jobs:
       - name: Build + typecheck (launcher)
         run: pnpm build && pnpm typecheck
 
+      - name: Echo an output of a step that does not exist
+        run: echo "${{ steps.nope.outputs.x }}"
+
       - name: Release scripts lint + typecheck (deno)
         run: |
           cd scripts

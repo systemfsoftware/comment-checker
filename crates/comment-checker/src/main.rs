@@ -43,7 +43,7 @@ fn emit_outcome(outcome: Outcome) -> ExitCode {
         }
         Outcome::Block { report, .. } => {
             emit_to_model(&report);
-            ExitCode::from(2)
+            ExitCode::from(1)
         }
     }
 }
