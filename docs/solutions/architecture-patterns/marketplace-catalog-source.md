@@ -64,7 +64,7 @@ The invariant this pattern protects: **a repository is a self-contained installa
 Validated on this repo (pending merge on branch `gh-75`):
 
 - `jq empty .claude-plugin/marketplace.json` exits 0; the single plugin entry is `comment-checker` with `source: "./"`.
-- `.claude-plugin/plugin.json` and `hooks/hooks.json` are byte-identical after the change — the catalog is purely additive.
+- Adding the catalog left `.claude-plugin/plugin.json` and `hooks/hooks.json` unchanged — the catalog is purely additive.
 - `release.jsonc` declares `.claude-plugin/plugin.json` as a surface and no marketplace file, so the catalog is not a version surface.
 
 ## Related
