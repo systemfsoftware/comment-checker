@@ -9,8 +9,8 @@ severity: medium
 applies_when:
   - Adding or editing a Claude Code / OMP marketplace catalog in this repo
   - Making the repo installable as a standalone plugin without an external catalog
-  - Deciding whether a new manifest participates in the version-sync gate
-tags: [marketplace, catalog, claude-plugin, omp, plugin-distribution, version-sync]
+  - Deciding whether a new manifest is a declared version surface in `release.jsonc`
+tags: [marketplace, catalog, claude-plugin, omp, plugin-distribution, version-surfaces]
 ---
 
 # Self-contained marketplace source — dual plugin+catalog convention
@@ -23,7 +23,7 @@ A repository that ships `.claude-plugin/plugin.json` alone is installable only t
 
 Ship two manifests side by side under `.claude-plugin/`:
 
-- **`plugin.json`** — the authoritative plugin manifest. Carries the plugin `name`, `version`, and hook wiring; this is the version surface the release gate reads — `PLUGIN_MANIFEST` (declared in `version-sync.ts`, consumed by `bumpAllSurfaces`/`checkAllSurfaces` in `version-files.ts`).
+- **`plugin.json`** — the authoritative plugin manifest. Carries the plugin `name`, `version`, and hook wiring; it is a version surface declared in `release.jsonc` (`versioning.surfaces`), so the release toolchain bumps it and `version-management sync check` (CI `checks`) fails when it drifts.
 - **`marketplace.json`** — the catalog that lets an installer discover and pull the plugin. Declares the marketplace and lists each plugin entry with its source.
 
 The catalog shape:
@@ -50,13 +50,13 @@ Three rules govern the catalog:
 The invariant this pattern protects: **a repository is a self-contained installation target when its catalog lives beside its plugin manifest and the catalog carries no version of its own.**
 
 - Without the catalog, installers fail with `Marketplace catalog not found` even though the plugin manifest is valid.
-- A catalog that carries a `version` field becomes a second authoritative version. The release gate enumerates version surfaces explicitly (`version-files.ts`); adding a catalog to that list is a per-surface decision, and the default is to keep the catalog out of it so no drift risk is introduced.
+- A catalog that carries a `version` field becomes a second authoritative version. `release.jsonc` enumerates version surfaces explicitly; adding a catalog to that list is a per-surface decision, and the default is to keep the catalog out of it so no drift risk is introduced.
 - The `plugin.json` description is the authoritative user-facing text once installed; the catalog description is display-only copy that can drift. Keep the catalog description a stable one-liner or drop it.
 
 ## When to Apply
 
 - When adding a plugin entry to the catalog, give it `name` and `source: "./"` exactly; do not invent a version for it.
-- When wiring a new manifest into the release gate, treat that as an explicit decision, not a default: the version-sync surface is an explicit enumerated list and growing it must be deliberate.
+- When declaring a new manifest as a version surface, treat that as an explicit decision, not a default: `versioning.surfaces` is an explicit enumerated list and growing it must be deliberate.
 - When editing the catalog, remember the deterministic `jq` gates validate JSON and field presence but cannot catch reserved-name, kebab-case, or `./`-prefix violations — the loader smoke test is the authoritative gate.
 
 ## Examples
@@ -64,8 +64,8 @@ The invariant this pattern protects: **a repository is a self-contained installa
 Validated on this repo (pending merge on branch `gh-75`):
 
 - `jq empty .claude-plugin/marketplace.json` exits 0; the single plugin entry is `comment-checker` with `source: "./"`.
-- `.claude-plugin/plugin.json` and `hooks/hooks.json` are byte-identical after the change — the catalog is purely additive.
-- No `marketplace` reference exists anywhere under `scripts/`; the version-sync surface (`version-sync.ts`) lists `PLUGIN_MANIFEST` for `plugin.json` but no marketplace file, confirming the catalog is not a version surface.
+- Adding the catalog left `.claude-plugin/plugin.json` and `hooks/hooks.json` unchanged — the catalog is purely additive.
+- `release.jsonc` declares `.claude-plugin/plugin.json` as a surface and no marketplace file, so the catalog is not a version surface.
 
 ## Related
 

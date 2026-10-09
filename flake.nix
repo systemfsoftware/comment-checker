@@ -130,6 +130,7 @@
             pkgs.pnpm_11
             pkgs.bubblewrap
             pkgs.zstd
+            pkgs.actionlint
             (mkBwrap pkgs (mkCommentChecker pkgs))
             # github-release-management, version-management, changeset-management:
             # the shared release workflow runs them through `nix develop`.
@@ -137,7 +138,7 @@
           ];
           # stdenv exports LD_FOR_BUILD, and Deno refuses to spawn under a
           # scoped --allow-run while any LD_*/DYLD_* var is set, which breaks
-          # every scripts/tools/*.ts that shells out (git, gh, docker, …).
+          # every scripts/tools/*.ts that shells out (tar, …).
           #
           # tree-sitter-language-pack 1.20.0's build.rs never finds its own
           # OUT_DIR cache when TSLP_LANGUAGES is set, so it re-downloads and
