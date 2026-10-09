@@ -2,7 +2,7 @@
 title: flake.nix release-asset hashes froze at the v0.1.5 era, so nix builds served the 0.1.0 binary under the 0.3.2 name
 date: 2026-08-29
 category: integration-issues
-module: flake.nix source build (rustPlatform.buildRustPackage) + CI nix gate; version surface (release-version.ts, check-versions.ts)
+module: flake.nix source build (rustPlatform.buildRustPackage) + CI nix gate; version surfaces (release.jsonc, version-management sync check)
 problem_type: integration_issue
 component: distribution
 root_cause: config_error
@@ -38,7 +38,7 @@ The flake builds the binary from the repo's own source with `rustPlatform.buildR
 
 There is no fetch of the released binary and no binary hash to go stale. The only `fetchurl` left is the tree-sitter-language-pack parser-sources bundle, delivered to the sandboxed build as a hash-pinned dependency (`TSLP_SOURCE_BUNDLE_URL=file://...`): nix verifies that hash, drift fails the build loudly, and the bundle version must track the crate version in Cargo.lock — a dependency pin, not an identity mechanism.
 
-The `version = "0.3.2"` binding stays so the version-sync surface keeps npm, cargo, and the flake in lockstep. CI runs a nix gate that evaluates the flake, builds the `comment-checker-bwrap` derivation, and asserts the built binary's `--version` equals the workspace `Cargo.toml` version.
+The `version = "0.3.2"` binding stays: `flake.nix` is a version surface declared in `release.jsonc`, so the release toolchain bumps it with npm and cargo, and `version-management sync check` (CI `checks`) fails when it drifts. CI runs a nix gate that evaluates the flake, builds the `comment-checker-bwrap` derivation, and asserts the built binary's `--version` equals the `package.json` release version.
 
 ## Prevention
 

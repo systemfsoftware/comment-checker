@@ -19,6 +19,7 @@
       { "kind": "toml", "header": "[workspace.package]", "path": "Cargo.toml" },
       { "kind": "json", "path": "npm/packages/comment-checker/package.json" },
       { "kind": "nix", "path": "flake.nix" },
+      { "kind": "json", "path": ".claude-plugin/plugin.json" },
     ],
   },
   "gate": { "strategy": "turbo", "task": "build" },
