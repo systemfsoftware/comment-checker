@@ -33,7 +33,7 @@ jobs:
             runner: ubuntu-24.04-arm
             bin: comment-checker
           - target: x86_64-pc-windows-msvc
-            suffix: windows-x64
+            suffix: win32-x64
             runner: windows-2022
             bin: comment-checker.exe
     steps:
