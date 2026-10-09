@@ -1,15 +1,13 @@
 //! Black-box exit-code and output-stream contract assert (issue #6).
 //!
-//! The release workflow's smoke step hard-codes `rc -eq 2` for flagged
-//! payloads; that contract previously lived only in YAML, duplicated and
-//! untested. These tests pin the contract in the crate so a classifier
-//! exit-code change breaks CI here, not at the first tag run.
+//! These tests run the built binary and pin the contract Claude Code reads:
+//! a clean payload exits 0, a flagged payload exits 2 with the report on
+//! stderr only.
 
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-/// The hook's blocked-verdict exit code — the constant the release smoke
-/// step asserts (`test "$rc" -eq 2`).
+/// The hook's blocked-verdict exit code.
 const BLOCKED_EXIT_CODE: u8 = 2;
 
 const CLEAN_PAYLOAD: &str = r##"{"tool_name":"Write","tool_input":{"file_path":"src/client.py","content":"# SPDX-License-Identifier: Apache-2.0\ndef load(path):\n    return open(path).read()\n"}}"##;
