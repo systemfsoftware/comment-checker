@@ -16,7 +16,7 @@
     "manifest": "package.json",
     "changelog": "CHANGELOG.md",
     "surfaces": [
-      { "kind": "toml", "header": "[workspace.package]", "path": "Cargo.toml" },
+      { "kind": "cargo", "path": "Cargo.toml" },
       { "kind": "json", "path": "npm/packages/comment-checker/package.json" },
       { "kind": "nix", "path": "flake.nix" },
       { "kind": "json", "path": ".claude-plugin/plugin.json" },
