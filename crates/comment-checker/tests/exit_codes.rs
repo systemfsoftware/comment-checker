@@ -99,9 +99,8 @@ fn flagged_payload_exits_with_the_blocked_contract() {
     assert_eq!(
         run.status.code(),
         Some(i32::from(BLOCKED_EXIT_CODE)),
-        "flagged payload must exit {BLOCKED_EXIT_CODE} — this constant is \
-         duplicated in .github/workflows/release.yml smoke step; changing it \
-         requires updating both"
+        "flagged payload must exit {BLOCKED_EXIT_CODE}, the blocked contract \
+         Claude Code reads"
     );
 }
 
