@@ -1,0 +1,11 @@
+[[repos]]
+name = "effect"
+url = "https://github.com/Effect-TS/effect"
+description = "Typed functional effects, Schema, Layer, and Stream for TypeScript"
+tag_prefix = "effect@4."
+
+[[repos]]
+name = "alchemy"
+url = "https://github.com/alchemy-run/alchemy"
+description = "Infrastructure-as-code framework for deploying cloud resources from TypeScript"
+tag_prefix = "v2.0.0-beta."
