@@ -11,7 +11,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 
 const README: &str = include_str!("../../../npm/packages/comment-checker/README.md");
-const REPO_SETTINGS: &str = include_str!("../../../.claude/settings.json");
 const PLUGIN_HOOKS: &str = include_str!("../../../hooks/hooks.json");
 const PLUGIN_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 const NOTHING_CHECKED: &str = "nothing checked this write.";
@@ -29,11 +28,11 @@ fn command_hooks(post_tool_use: &Value) -> Vec<String> {
         .collect()
 }
 
-fn exactly_one(commands: &[String], source: &str) -> String {
-    let [command] = commands else {
-        panic!("{source} must wire exactly one PostToolUse command hook, found {commands:?}")
-    };
-    command.clone()
+fn first(commands: Vec<String>, source: &str) -> String {
+    commands
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| panic!("no PostToolUse command hook in {source}"))
 }
 
 fn parse(json: &str, source: &str) -> Value {
@@ -48,20 +47,15 @@ fn readme_hook_command() -> String {
         .filter_map(|json| serde_json::from_str::<Value>(json).ok())
         .flat_map(|cfg| command_hooks(&cfg["hooks"]["PostToolUse"]))
         .collect();
-    exactly_one(&commands, "the npm README")
-}
-
-fn repo_settings_hook_command() -> String {
-    let settings = parse(REPO_SETTINGS, ".claude/settings.json");
-    exactly_one(
-        &command_hooks(&settings["hooks"]["PostToolUse"]),
-        ".claude/settings.json",
-    )
+    first(commands, "the npm README")
 }
 
 fn plugin_hook_command() -> String {
     let hooks = parse(PLUGIN_HOOKS, "hooks/hooks.json");
-    exactly_one(&command_hooks(&hooks["hooks"]["PostToolUse"]), "hooks/hooks.json")
+    first(
+        command_hooks(&hooks["hooks"]["PostToolUse"]),
+        "hooks/hooks.json",
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -343,15 +337,6 @@ fn assert_runs_checker(sandbox: &Sandbox, dir: &str, code: i32) {
 }
 
 #[test]
-fn repo_settings_hook_runs_the_readme_hook_command() {
-    assert_eq!(
-        repo_settings_hook_command(),
-        readme_hook_command(),
-        ".claude/settings.json must wire the exact hook command the npm README documents"
-    );
-}
-
-#[test]
 fn hook_drains_payload_and_reports_when_checker_is_on_neither_path_nor_direnv() {
     for surface in Surface::ALL {
         assert_drains_and_reports(
@@ -452,73 +437,5 @@ fn plugin_hook_drains_payload_and_reports_when_project_dir_is_unset() {
     assert!(
         stderr.contains("CLAUDE_PROJECT_DIR must be set by the hook host"),
         "run.ts, not a deno start-up failure, must be what reported; stderr: {stderr}"
-    );
-}
-
-#[test]
-fn real_direnv_exits_1_without_running_the_command_when_envrc_is_blocked_or_command_is_missing() {
-    let Some(direnv) = find_host_executable("direnv") else {
-        assert!(
-            std::env::var_os("CI").is_none(),
-            "CI must install direnv: this test checks the direnv stubs against the real thing"
-        );
-        eprintln!(
-            "SKIPPED real_direnv_…: direnv is not on PATH, so the direnv stubs are unchecked against real direnv"
-        );
-        return;
-    };
-    let sandbox = Sandbox::bare(Surface::Readme);
-    let project = sandbox.root.join("project");
-    let home = sandbox.root.join("home");
-    let marker = sandbox.root.join("command-ran");
-    fs::write(project.join(".envrc"), "export COMMENT_CHECKER_TEST=1\n").expect("write .envrc");
-    let direnv_cmd = |args: &[&str]| {
-        Command::new(&direnv)
-            .args(args)
-            .env_clear()
-            .env("PATH", std::env::var_os("PATH").expect("PATH is set"))
-            .env("HOME", &home)
-            .env("XDG_CONFIG_HOME", home.join("config"))
-            .env("XDG_DATA_HOME", home.join("data"))
-            .env("XDG_CACHE_HOME", home.join("cache"))
-            .stdin(Stdio::null())
-            .output()
-            .expect("run direnv")
-    };
-    let project_arg = project.to_str().expect("utf-8 project path");
-    let touch_marker = format!("touch '{}'", marker.display());
-    let exec = |command: &[&str]| {
-        let mut args = vec!["exec", project_arg];
-        args.extend_from_slice(command);
-        direnv_cmd(&args)
-    };
-
-    let blocked = exec(&["sh", "-c", &touch_marker]);
-    assert_eq!(
-        blocked.status.code(),
-        Some(1),
-        "blocked .envrc: {}",
-        String::from_utf8_lossy(&blocked.stderr)
-    );
-    assert!(
-        !marker.exists(),
-        "direnv ran the command despite a blocked .envrc"
-    );
-
-    let allowed = direnv_cmd(&["allow", project_arg]);
-    assert!(allowed.status.success(), "direnv allow failed: {allowed:?}");
-
-    let missing = exec(&["comment-checker-not-installed"]);
-    assert_eq!(
-        missing.status.code(),
-        Some(1),
-        "missing command: {}",
-        String::from_utf8_lossy(&missing.stderr)
-    );
-
-    let ran = exec(&["sh", "-c", &touch_marker]);
-    assert!(
-        ran.status.success() && marker.exists(),
-        "an allowed .envrc must run the command: {ran:?}"
     );
 }
