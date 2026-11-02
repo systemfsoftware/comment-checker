@@ -61,7 +61,7 @@ fn repo_settings_hook_command() -> String {
 
 fn plugin_hook_command() -> String {
     let hooks = parse(PLUGIN_HOOKS, "hooks/hooks.json");
-    exactly_one(&command_hooks(&hooks["PostToolUse"]), "hooks/hooks.json")
+    exactly_one(&command_hooks(&hooks["hooks"]["PostToolUse"]), "hooks/hooks.json")
 }
 
 #[derive(Clone, Copy)]
