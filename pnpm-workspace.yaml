@@ -2,5 +2,8 @@ packages:
   - 'npm/packages/*'
 allowBuilds:
   msgpackr-extract: false
+minimumReleaseAgeExclude:
+  - effect
+  - '@effect/*'
 overrides:
   '@types/node': ^24.19.1
