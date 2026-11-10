@@ -37,6 +37,9 @@ jobs:
         with:
           extra-conf: |
             access-tokens = github.com=${{ github.token }}
+            extra-substituters = https://nix.systemfsoftware.com
+            extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
+            fallback = true
       - name: Lint GitHub Actions workflows (actionlint from the locked nixpkgs)
         run: nix shell --inputs-from . nixpkgs#actionlint -c actionlint -color
 
@@ -56,6 +59,9 @@ jobs:
         with:
           extra-conf: |
             access-tokens = github.com=${{ github.token }}
+            extra-substituters = https://nix.systemfsoftware.com
+            extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
+            fallback = true
       - name: Flake evaluates
         run: nix flake check
       - name: Attribute resolves
