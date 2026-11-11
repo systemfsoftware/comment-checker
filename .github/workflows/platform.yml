@@ -37,6 +37,17 @@ jobs:
             runner: windows-2022
             bin: comment-checker.exe
     steps:
+      - name: Reject unknown mode
+        shell: bash
+        run: |
+          case "${{ inputs.mode }}" in
+            rehearsal|release) exit 0 ;;
+            *)
+              echo "platform.yml: mode must be rehearsal or release, got '${{ inputs.mode }}'" >&2
+              exit 1
+              ;;
+          esac
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions-rust-lang/setup-rust-toolchain@b328d6be848e9b620901df2e49d27ad7e5536c0b # v1
