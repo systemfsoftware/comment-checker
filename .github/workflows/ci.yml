@@ -27,7 +27,7 @@ jobs:
       contents: read
 
   checks:
-    name: actionlint
+    name: actionlint + version surfaces
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -39,6 +39,9 @@ jobs:
             access-tokens = github.com=${{ github.token }}
       - name: Lint GitHub Actions workflows (actionlint from the locked nixpkgs)
         run: nix shell --inputs-from . nixpkgs#actionlint -c actionlint -color
+      - name: Version surfaces agree (release.jsonc, checked by the locked release toolchain)
+        if: ${{ !cancelled() }}
+        run: nix shell --inputs-from . pnpm-release-management#release-tools -c version-management sync check
 
   mutation:
     uses: ./.github/workflows/mutation.yml
@@ -67,3 +70,9 @@ jobs:
         run: nix build --no-link .#packages.x86_64-linux.comment-checker-bwrap
       - name: Build the release tarballs
         run: nix build --no-link .#workspace-tarballs
+      - name: Smoke the unwrapped binary version (the bwrap wrapper needs --unshare-net, which Actions containers do not permit)
+        run: |
+          want="claude-code-comment-checker $(jq -r .version package.json)"
+          out="$(nix shell .#comment-checker -c comment-checker --version)"
+          [ "$out" = "$want" ] \
+            || { echo "nix-built binary reports '$out', expected '$want'" >&2; exit 1; }
