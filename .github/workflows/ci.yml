@@ -27,7 +27,7 @@ jobs:
       contents: read
 
   checks:
-    name: actionlint
+    name: actionlint + version surfaces
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -39,6 +39,9 @@ jobs:
             access-tokens = github.com=${{ github.token }}
       - name: Lint GitHub Actions workflows (actionlint from the locked nixpkgs)
         run: nix shell --inputs-from . nixpkgs#actionlint -c actionlint -color
+      - name: Version surfaces agree (release.jsonc, checked by the locked release toolchain)
+        if: ${{ !cancelled() }}
+        run: nix shell --inputs-from . pnpm-release-management#release-tools -c version-management sync check
 
   mutation:
     uses: ./.github/workflows/mutation.yml
