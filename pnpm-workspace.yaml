@@ -4,3 +4,6 @@ allowBuilds:
   msgpackr-extract: false
 overrides:
   '@types/node': ^24.19.1
+
+# Three days (minutes); the same in every systemfsoftware repo, so producer and consumer gates agree.
+minimumReleaseAge: 4320
