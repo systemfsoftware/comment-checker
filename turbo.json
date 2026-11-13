@@ -1,5 +1,8 @@
 {
   "$schema": "https://v2-10-1.turborepo.dev/schema.json",
+  "futureFlags": {
+    "affectedUsingTaskInputs": true
+  },
   "cacheDir": ".turbo/cache",
   "tasks": {
     "build": {
