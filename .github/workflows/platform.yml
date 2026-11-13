@@ -50,7 +50,7 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions-rust-lang/setup-rust-toolchain@b328d6be848e9b620901df2e49d27ad7e5536c0b # v1
+      - uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v1
         if: inputs.mode == 'release'
         with:
           toolchain: stable
