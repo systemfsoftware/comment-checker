@@ -49,6 +49,7 @@ fn language_name_for_alias(extension: &str) -> Option<&'static str> {
         "css" => Some("css"),
         "dockerfile" => Some("dockerfile"),
         "hcl" | "tf" => Some("hcl"),
+        "nix" => Some("nix"),
         "md" | "markdown" => Some("markdown"),
         "r" | "rmd" => Some("r"),
         "dart" => Some("dart"),

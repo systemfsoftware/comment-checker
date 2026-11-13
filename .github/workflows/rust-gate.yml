@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions-rust-lang/setup-rust-toolchain@c8ff772090ab9d00f7f7bd7b388f3c3032282e3b # v1
+      - uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v1
         with:
           toolchain: stable
           components: clippy, rustfmt
@@ -27,9 +27,6 @@ jobs:
 
       - name: Warm the deno cache for hooks/run.ts from deno.lock
         run: deno cache --frozen --config hooks/deno.jsonc hooks/run.ts
-
-      - name: direnv for the real-direnv test
-        run: sudo apt-get update && sudo apt-get install -y direnv
 
       - name: Cache cargo build
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
