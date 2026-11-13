@@ -1,5 +1,8 @@
 name: CI
 
+# One job per pull request. A pull request runs the fast checks; a Mergify queue draft (head ref
+# `mergify/merge-queue/*`) and a push to master also run the Rust and hook tests; master alone runs the Nix build and the
+# packaging rehearsal. A newer push to a pull request cancels its older run; master and the queue drafts never cancel.
 on:
   push:
     branches: [master]
@@ -8,48 +11,92 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && !startsWith(github.head_ref, 'mergify/merge-queue/') }}
+
 jobs:
-  gate:
-    uses: ./.github/workflows/rust-gate.yml
-    permissions:
-      contents: read
-
-  npm:
-    uses: ./.github/workflows/js-gate.yml
-    permissions:
-      contents: read
-
-  packaging:
-    uses: ./.github/workflows/platform.yml
-    with:
-      mode: rehearsal
-    permissions:
-      contents: read
-
-  checks:
-    name: actionlint + version surfaces
+  check:
+    name: check
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      FULL: ${{ github.event_name != 'pull_request' || startsWith(github.head_ref, 'mergify/merge-queue/') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - id: scope
+        name: Classify the change
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          docs=false
+          if [ "$FULL" != true ] && ! git diff --name-only "$BASE" "$HEAD" | grep -qvE '(^docs/|\.md$)'; then
+            docs=true
+          fi
+          echo "docs=$docs" >> "$GITHUB_OUTPUT"
+
+      - if: steps.scope.outputs.docs != 'true'
+        uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
         with:
           extra-conf: |
             access-tokens = github.com=${{ github.token }}
-      - name: Lint GitHub Actions workflows (actionlint from the locked nixpkgs)
-        run: nix shell --inputs-from . nixpkgs#actionlint -c actionlint -color
-      - name: Version surfaces agree (release.jsonc, checked by the locked release toolchain)
-        if: ${{ !cancelled() }}
-        run: nix shell --inputs-from . pnpm-release-management#release-tools -c version-management sync check
+            extra-substituters = https://nix.systemfsoftware.com
+            extra-trusted-public-keys = nix-cache-1:wXA8I4DayNW9q6enUyQA/P/nT38pGSTLt374t3gsn7M=
+      - if: steps.scope.outputs.docs != 'true'
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v1
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+      - if: steps.scope.outputs.docs != 'true'
+        uses: ./.github/actions/tslp-project-root
+      - if: steps.scope.outputs.docs != 'true'
+        uses: ./.github/actions/setup-pnpm-node
+      - if: steps.scope.outputs.docs != 'true'
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
+        with:
+          deno-version: 2.9.5
+      - if: steps.scope.outputs.docs != 'true'
+        name: Install JS deps (frozen)
+        run: pnpm install --frozen-lockfile
 
-  mutation:
-    uses: ./.github/workflows/mutation.yml
-    permissions:
-      contents: read
+      - if: steps.scope.outputs.docs != 'true'
+        name: Format, clippy, lint, build and typecheck
+        run: |
+          set -euo pipefail
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          pnpm lint
+          pnpm build && pnpm typecheck
+          (cd scripts && deno task lint)
+      - if: steps.scope.outputs.docs != 'true'
+        name: Workflow lint, version surfaces and change intent
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          INTENT: ${{ github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main' }}
+        run: |
+          set -euo pipefail
+          nix shell --inputs-from . nixpkgs#actionlint -c actionlint -color
+          nix shell --inputs-from . pnpm-release-management#release-tools -c version-management sync check
+          if [ "$INTENT" = true ]; then
+            nix shell --inputs-from . pnpm-release-management#release-tools -c changeset-management check "$BASE"
+          fi
+      - if: steps.scope.outputs.docs != 'true' && env.FULL == 'true'
+        name: Test (unit + property + composition + F1 + plugin hooks)
+        run: |
+          set -euo pipefail
+          deno cache --frozen --config hooks/deno.jsonc hooks/run.ts
+          cargo test --all-targets -- --test-threads=4
 
   nix:
     name: nix flake check
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -76,3 +123,11 @@ jobs:
           out="$(nix shell .#comment-checker -c comment-checker --version)"
           [ "$out" = "$want" ] \
             || { echo "nix-built binary reports '$out', expected '$want'" >&2; exit 1; }
+
+  packaging:
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/platform.yml
+    with:
+      mode: rehearsal
+    permissions:
+      contents: read
