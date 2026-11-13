@@ -65,6 +65,8 @@
               (builtins.match ".*/crates/.*" path != null);
           };
           cargoLock.lockFile = ./Cargo.lock;
+          nativeBuildInputs = [ pkgs.pkg-config ];
+          buildInputs = [ pkgs.zstd ];
           # The repo's quality gates (cargo test, mutation) run in CI, not in
           # this derivation; doCheck defaults to true in buildRustPackage and
           # would run the whole suite inside the nix sandbox.
