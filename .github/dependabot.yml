@@ -1,3 +1,6 @@
+# The org's one Dependabot configuration (public-repo standard, item 5). Only the ecosystems and the extra
+# major-version ignores differ by repository. The 3-day cooldown matches pnpm's minimumReleaseAge; vendored
+# subtrees under repos/ are never updated in place; @systemfsoftware/* moves with the flake input.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -5,94 +8,128 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 3
+    exclude-paths:
+      - "repos/**"
+    labels:
+      - "automerge"
     groups:
       github-actions-minor-patch:
-        patterns:
-          - "*"
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
-  # Root workspace: build/lint tooling only.
-        update-types:
-          - minor
-          - patch
-  - package-ecosystem: npm
+  - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: weekly
       day: monday
-    versioning-strategy: increase
+    cooldown:
+      default-days: 3
+    exclude-paths:
+      - "repos/**"
+    versioning-strategy: "increase"
     open-pull-requests-limit: 20
     ignore:
-      # typescript majors are deliberate migrations, not routine bumps:
-      # the npm launcher ships against a specific typescript compiler surface
-      # and a 7.x major would break it.
-      - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
-
-    groups:
-      turborepo-minor-patch:
-        patterns:
-          - "turbo"
-        update-types: ["minor", "patch"]
-
-      other-minor-patch:
-        patterns: ["*"]
-        exclude-patterns:
-          - "turbo"
-          - "typescript"
-        update-types: ["minor", "patch"]
-
-      major-updates:
-        patterns: ["*"]
-        exclude-patterns:
-          - "typescript"
-        update-types: ["major"]
-
-  # The published npm wrapper. Effect is on v4 -- effect@3 is a
-  # deliberate migration the wrapper never makes, so block a stray 3.x pin.
-  - package-ecosystem: npm
-    directory: "/npm/packages/comment-checker"
-    schedule:
-      interval: weekly
-      day: monday
-    versioning-strategy: increase
-    open-pull-requests-limit: 20
-    ignore:
-      # typescript majors are deliberate migrations, not routine bumps.
-      - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
-      # @types/node tracks the Node 24 LTS line; a newer major is a deliberate move.
+      - dependency-name: "@systemfsoftware/*"
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
-
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       oxlint-minor-patch:
         patterns:
           - "oxlint"
+          - "@oxlint/*"
         update-types: ["minor", "patch"]
-
       oxlint-major:
         patterns:
           - "oxlint"
+          - "@oxlint/*"
         update-types: ["major"]
-
       effect-minor-patch:
         patterns:
           - "@effect/*"
           - "effect"
         update-types: ["minor", "patch"]
-
-      other-minor-patch:
-        patterns: ["*"]
-        exclude-patterns:
-          - "oxlint"
+      effect-major:
+        patterns:
           - "@effect/*"
+          - "effect"
+        update-types: ["major"]
+      turborepo-minor-patch:
+        patterns:
+          - "turbo"
+        update-types: ["minor", "patch"]
+      testing-minor-patch:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+        update-types: ["minor", "patch"]
+      testing-major:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+        update-types: ["major"]
+      commitlint-minor-patch:
+        patterns:
+          - "@commitlint/*"
+        update-types: ["minor", "patch"]
+      typescript-minor-patch:
+        patterns:
           - "typescript"
         update-types: ["minor", "patch"]
-
-      major-updates:
-        patterns: ["*"]
+      types-node-minor-patch:
+        patterns:
+          - "@types/node"
+        update-types: ["minor", "patch"]
+      other-minor-patch:
+        patterns:
+          - "*"
         exclude-patterns:
           - "oxlint"
+          - "@oxlint/*"
+          - "@effect/*"
+          - "effect"
+          - "@commitlint/*"
+          - "typescript"
+          - "@types/node"
+        update-types: ["minor", "patch"]
+      major-updates:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "oxlint"
+          - "@oxlint/*"
+          - "@commitlint/*"
           - "typescript"
           - "@types/node"
         update-types: ["major"]
+
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 3
+    exclude-paths:
+      - "repos/**"
+    groups:
+      cargo-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "nix"
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 3
+    exclude-paths:
+      - "repos/**"
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]

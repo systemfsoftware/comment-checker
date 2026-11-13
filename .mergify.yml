@@ -1,10 +1,28 @@
 # Mergify: policy lives in systemfsoftware/.github (.mergify.yml). This file only names this repo's CI checks.
 extends: .github
 queue_rules:
+  - name: subtree
+    merge_method: merge
+    queue_conditions:
+      - 'commits[*].commit_message ~= (?ms)\A(?=.*^git-subtree-dir: \S+$)(?=.*^git-subtree-split: [0-9a-f]{40}$)'
+      - -linear-history
+      - check-success = check
+    merge_conditions:
+      - check-success = check
   - name: default
     # Checked on the PR itself before it enters the queue.
     queue_conditions:
       - check-success = check
+      - '-commits[*].commit_message ~= (?m)^git-subtree-dir: \S+$'
+      - not:
+          and:
+            - 'title ~= (?i)(?<![\w.-])(add|pull|update|sync|vendor|vendored|vendoring|refresh|import|bump|upgrade)(?!\.?[\w-])'
+            - 'title ~= (?i)(?<![\w.-])subtrees?(?!\.?[\w-])'
+            - or:
+                - 'added-files ~= ^(vendor|vendored|third[_-]party|external|repos|subtrees?)/'
+                - 'modified-files ~= ^(vendor|vendored|third[_-]party|external|repos|subtrees?)/'
+      - -added-files ~= ^(repos/effect|repos/alchemy|repos/constitution)/
+      - -modified-files ~= ^(repos/effect|repos/alchemy|repos/constitution)/
     # Checked on Mergify's queue draft PR (mergify/merge-queue/*), i.e. CI on the PR rebased with main and any batch.
     merge_conditions:
       - check-success = check
