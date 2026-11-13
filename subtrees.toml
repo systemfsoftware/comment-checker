@@ -9,3 +9,9 @@ name = "alchemy"
 url = "https://github.com/alchemy-run/alchemy"
 description = "Infrastructure-as-code framework for deploying cloud resources from TypeScript"
 tag_prefix = "v2.0.0-beta."
+
+[[repos]]
+name = "constitution"
+url = "https://github.com/systemfsoftware/constitution"
+description = "Shared engineering constitution: pure-core / imperative-shell design law"
+branch = "main"
