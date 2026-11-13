@@ -22,7 +22,6 @@ import * as DateTime from "effect/DateTime"
 import * as Effect from "effect/Effect"
 import * as Base64 from "effect/encoding/Base64"
 import { dual } from "effect/Function"
-import type * as HttpClientRequest from "effect/http/HttpClientRequest"
 import type * as HttpClientResponse from "effect/http/HttpClientResponse"
 import * as Layer from "effect/Layer"
 import * as Option from "effect/Option"
@@ -192,6 +191,13 @@ declare module "effect/ai/Prompt" {
        * The detail level of the image to be sent to the model. One of `high`, `low`, or `auto`. Defaults to `auto`.
        */
       readonly imageDetail?: ImageDetail | null
+      /**
+       * Marks the input image or file as the end of a reusable prompt prefix.
+       *
+       * Requires GPT-5.6 or later. OpenAI may reject requests that use this
+       * option with earlier models.
+       */
+      readonly promptCacheBreakpoint?: PromptCacheBreakpoint | null
     } | null
   }
 
@@ -704,10 +710,9 @@ export const make = Effect.fnUntraced(function*({ model, config: providerConfig 
         ...apiConfig,
         input: messages,
         include: include.size > 0 ? Array.from(include) : undefined,
-        text: {
-          verbosity: config.text?.verbosity ?? undefined,
-          format: responseFormat
-        }
+        text: responseFormat !== undefined || config.text?.verbosity !== undefined
+          ? { verbosity: config.text?.verbosity, format: responseFormat }
+          : undefined
       }
       if (tools) request.tools = tools
       if (toolChoice) request.tool_choice = toolChoice
@@ -727,6 +732,7 @@ export const make = Effect.fnUntraced(function*({ model, config: providerConfig 
         const [rawResponse, response] = yield* client.createResponse(request)
         annotateResponse(options.span, rawResponse)
         return yield* makeResponse({
+          config,
           options,
           rawResponse,
           response,
@@ -925,46 +931,8 @@ const prepareMessages = Effect.fnUntraced(
               }
 
               case "file": {
-                if (part.mediaType.startsWith("image/")) {
-                  const detail = getImageDetail(part)
-                  const mediaType = part.mediaType === "image/*" ? "image/jpeg" : part.mediaType
-
-                  if (typeof part.data === "string" && isFileId(part.data, config)) {
-                    content.push({ type: "input_image", file_id: part.data, detail })
-                  } else {
-                    const imageUrl = part.data instanceof URL
-                      ? part.data.toString()
-                      : part.data instanceof Uint8Array
-                      ? `data:${mediaType};base64,${Base64.encode(part.data)}`
-                      : /^(data:|https?:\/\/)/i.test(part.data)
-                      ? part.data
-                      : `data:${mediaType};base64,${part.data}`
-                    content.push({ type: "input_image", image_url: imageUrl, detail })
-                  }
-                } else if (part.mediaType === "application/pdf") {
-                  if (typeof part.data === "string" && isFileId(part.data, config)) {
-                    content.push({ type: "input_file", file_id: part.data })
-                  }
-
-                  if (part.data instanceof URL) {
-                    content.push({ type: "input_file", file_url: part.data.toString() })
-                  }
-
-                  if (part.data instanceof Uint8Array) {
-                    const base64 = Base64.encode(part.data)
-                    const fileName = part.fileName ?? `part-${index}.pdf`
-                    const fileData = `data:application/pdf;base64,${base64}`
-                    content.push({ type: "input_file", filename: fileName, file_data: fileData })
-                  }
-                } else {
-                  return yield* AiError.make({
-                    module: "OpenAiLanguageModel",
-                    method: "prepareMessages",
-                    reason: new AiError.InvalidRequestError({
-                      description: `Detected unsupported media type for file: '${part.mediaType}'`
-                    })
-                  })
-                }
+                content.push(yield* prepareFilePart(part, index, config))
+                break
               }
             }
           }
@@ -1087,6 +1055,17 @@ const prepareMessages = Effect.fnUntraced(
                   break
                 }
 
+                const result = part.providerExecuted
+                  ? providerExecutedParts.find((candidate): candidate is Prompt.ToolResultPart =>
+                    candidate.type === "tool-result" && candidate.id === part.id && candidate.name === part.name
+                  )
+                  : undefined
+
+                // The paired result emits the single stored-item reference
+                if (useItemReferences && Predicate.isNotUndefined(result)) {
+                  break
+                }
+
                 if (useItemReferences && Predicate.isNotNull(id)) {
                   messages.push({ type: "item_reference", id })
                   break
@@ -1098,10 +1077,7 @@ const prepareMessages = Effect.fnUntraced(
                   ) {
                     break
                   }
-                  const result = providerExecutedParts.find((candidate) =>
-                    candidate.type === "tool-result" && candidate.id === part.id && candidate.name === part.name
-                  )
-                  if (Predicate.isUndefined(result) || result.type !== "tool-result") {
+                  if (Predicate.isUndefined(result)) {
                     return yield* unreplayableProviderItem(part.name, part.id)
                   }
                   if (
@@ -1337,7 +1313,7 @@ const prepareMessages = Effect.fnUntraced(
                 id,
                 type: "shell_call_output",
                 call_id: part.id,
-                output: part.result as any,
+                output: getShellOutput(part),
                 ...(Predicate.isNotNull(status) ? { status } : {})
               })
               continue
@@ -1348,7 +1324,7 @@ const prepareMessages = Effect.fnUntraced(
                 id,
                 type: "local_shell_call_output",
                 call_id: part.id,
-                output: part.result as any,
+                output: getShellOutput(part),
                 ...(Predicate.isNotNull(status) ? { status } : {})
               })
               continue
@@ -1357,7 +1333,9 @@ const prepareMessages = Effect.fnUntraced(
             messages.push({
               type: "function_call_output",
               call_id: part.id,
-              output: typeof part.result === "string" ? part.result : JSON.stringify(part.result),
+              output: Predicate.isUndefined(part.modelOutput)
+                ? typeof part.result === "string" ? part.result : JSON.stringify(part.result)
+                : yield* prepareToolResultOutput(part.modelOutput, config),
               ...(Predicate.isNotNull(status) ? { status } : {})
             })
           }
@@ -1374,16 +1352,6 @@ const prepareMessages = Effect.fnUntraced(
 // =============================================================================
 // HTTP Details
 // =============================================================================
-
-const buildHttpRequestDetails = (
-  request: HttpClientRequest.HttpClientRequest
-): typeof Response.HttpRequestDetails.Type => ({
-  method: request.method,
-  url: request.url,
-  urlParams: Array.from(request.urlParams),
-  hash: Option.getOrUndefined(request.hash),
-  headers: Redactable.redact(request.headers) as Record<string, string>
-})
 
 const buildHttpResponseDetails = (
   response: HttpClientResponse.HttpClientResponse
@@ -1449,11 +1417,13 @@ const isKnownResponseStreamEvent = (
 
 const makeResponse = Effect.fnUntraced(
   function*<Tools extends ReadonlyArray<Tool.Any>>({
+    config,
     options,
     rawResponse,
     response,
     toolNameMapper
   }: {
+    readonly config: typeof Config.Service
     readonly options: LanguageModel.ProviderOptions
     readonly rawResponse: OpenAiSchema.Response
     readonly response: HttpClientResponse.HttpClientResponse
@@ -1481,8 +1451,7 @@ const makeResponse = Effect.fnUntraced(
       type: "response-metadata",
       id: rawResponse.id,
       modelId: rawResponse.model as string,
-      timestamp: DateTime.formatIso(DateTime.fromDateUnsafe(createdAt)),
-      request: buildHttpRequestDetails(response.request)
+      timestamp: DateTime.formatIso(DateTime.fromDateUnsafe(createdAt))
     })
 
     for (const part of rawResponse.output) {
@@ -1562,7 +1531,7 @@ const makeResponse = Effect.fnUntraced(
               })
           })
 
-          const params = yield* transformToolCallParams(options, part.name, toolParams)
+          const params = yield* transformToolCallParams(config, options, part.name, toolParams)
 
           parts.push({
             type: "tool-call",
@@ -1680,6 +1649,10 @@ const makeResponse = Effect.fnUntraced(
         }
 
         case "message": {
+          // Commentary text would be joined with the final answer and break JSON decoding
+          if (options.responseFormat.type === "json" && part.phase === "commentary") {
+            break
+          }
           for (const contentPart of part.content) {
             switch (contentPart.type) {
               case "output_text": {
@@ -1983,8 +1956,7 @@ const makeStreamResponse = Effect.fnUntraced(
               type: "response-metadata",
               id: event.response.id,
               modelId: event.response.model,
-              timestamp: DateTime.formatIso(DateTime.fromDateUnsafe(createdAt)),
-              request: buildHttpRequestDetails(response.request)
+              timestamp: DateTime.formatIso(DateTime.fromDateUnsafe(createdAt))
             })
             break
           }
@@ -2183,7 +2155,7 @@ const makeStreamResponse = Effect.fnUntraced(
               case "shell_call": {
                 const toolName = toolNameMapper.getCustomName("shell")
                 activeToolCalls[event.output_index] = {
-                  id: event.item.id ?? event.item.call_id,
+                  id: event.item.call_id,
                   name: toolName
                 }
                 break
@@ -2349,7 +2321,7 @@ const makeStreamResponse = Effect.fnUntraced(
                     })
                 })
 
-                const params = yield* transformToolCallParams(options, toolName, toolParams)
+                const params = yield* transformToolCallParams(config, options, toolName, toolParams)
 
                 parts.push({
                   type: "tool-params-end",
@@ -2504,7 +2476,7 @@ const makeStreamResponse = Effect.fnUntraced(
                 const toolName = toolNameMapper.getCustomName("shell")
                 parts.push({
                   type: "tool-call",
-                  id: event.item.id ?? event.item.call_id,
+                  id: event.item.call_id,
                   name: toolName,
                   params: { action: event.item.action },
                   metadata: { openai: makeItemIdMetadata(event.item.id) }
@@ -2657,7 +2629,7 @@ const makeStreamResponse = Effect.fnUntraced(
                   })
               })
 
-              const params = yield* transformToolCallParams(options, toolCall.name, toolParams)
+              const params = yield* transformToolCallParams(config, options, toolCall.name, toolParams)
 
               parts.push({
                 type: "tool-params-end",
@@ -2935,9 +2907,9 @@ const prepareTools = Effect.fnUntraced(function*<Tools extends ReadonlyArray<Too
   // Convert the tools in the toolkit to the provider-defined format
   for (const tool of allowedTools) {
     if (Tool.isUserDefined(tool) || Tool.isDynamic(tool)) {
-      const strict = Tool.getStrictMode(tool) ?? config.strictJsonSchema ?? true
+      const strict = getToolStrictMode(tool, config)
       const description = Tool.getDescription(tool)
-      const parameters = yield* tryToolJsonSchema(tool, "prepareTools")
+      const parameters = yield* tryToolJsonSchema(tool, strict, "prepareTools")
       tools.push({
         type: "function",
         name: tool.name,
@@ -3106,6 +3078,81 @@ const prepareTools = Effect.fnUntraced(function*<Tools extends ReadonlyArray<Too
   return { tools, toolChoice }
 })
 
+const prepareToolResultOutput = Effect.fnUntraced(function*(
+  modelOutput: ReadonlyArray<Prompt.ToolModelOutputPart>,
+  config: typeof Config.Service
+): Effect.fn.Return<string | Array<typeof OpenAiSchema.InputContent.Encoded>, AiError.AiError> {
+  if (modelOutput.length === 0) {
+    return ""
+  }
+  const output: Array<typeof OpenAiSchema.InputContent.Encoded> = []
+  for (let index = 0; index < modelOutput.length; index++) {
+    const part = modelOutput[index]
+    output.push(
+      part.type === "text"
+        ? { type: "input_text", text: part.text, ...getPromptCacheBreakpoint(part) }
+        : yield* prepareFilePart(part, index, config)
+    )
+  }
+  return output
+})
+
+const prepareFilePart = Effect.fnUntraced(function*(
+  part: Prompt.FilePart,
+  index: number,
+  config: typeof Config.Service
+): Effect.fn.Return<typeof OpenAiSchema.InputContent.Encoded, AiError.AiError> {
+  const promptCacheBreakpoint = getPromptCacheBreakpoint(part)
+
+  if (part.mediaType.startsWith("image/")) {
+    const detail = getImageDetail(part)
+    const mediaType = part.mediaType === "image/*" ? "image/jpeg" : part.mediaType
+
+    if (typeof part.data === "string" && isFileId(part.data, config)) {
+      return { type: "input_image", file_id: part.data, detail, ...promptCacheBreakpoint }
+    }
+
+    const imageUrl = part.data instanceof URL
+      ? part.data.toString()
+      : part.data instanceof Uint8Array
+      ? `data:${mediaType};base64,${Base64.encode(part.data)}`
+      : /^(data:|https?:\/\/)/i.test(part.data)
+      ? part.data
+      : `data:${mediaType};base64,${part.data}`
+    return { type: "input_image", image_url: imageUrl, detail, ...promptCacheBreakpoint }
+  }
+
+  if (part.mediaType === "application/pdf") {
+    if (typeof part.data === "string" && isFileId(part.data, config)) {
+      return { type: "input_file", file_id: part.data, ...promptCacheBreakpoint }
+    }
+
+    if (part.data instanceof URL || (typeof part.data === "string" && /^https?:\/\//i.test(part.data))) {
+      return { type: "input_file", file_url: part.data.toString(), ...promptCacheBreakpoint }
+    }
+
+    const fileData = part.data instanceof Uint8Array
+      ? `data:application/pdf;base64,${Base64.encode(part.data)}`
+      : /^data:/i.test(part.data)
+      ? part.data
+      : `data:application/pdf;base64,${part.data}`
+    return {
+      type: "input_file",
+      filename: part.fileName ?? `part-${index}.pdf`,
+      file_data: fileData,
+      ...promptCacheBreakpoint
+    }
+  }
+
+  return yield* AiError.make({
+    module: "OpenAiLanguageModel",
+    method: "prepareMessages",
+    reason: new AiError.InvalidRequestError({
+      description: `Detected unsupported media type for file: '${part.mediaType}'`
+    })
+  })
+})
+
 // =============================================================================
 // Utilities
 // =============================================================================
@@ -3129,11 +3176,13 @@ const getStatus = (
 const getEncryptedContent = (
   part: Prompt.ReasoningPart
 ): string | null => part.options.openai?.encryptedContent ?? null
+// Shell tool successes are `{ output }`; failure results are passed through unchanged
+const getShellOutput = (part: Prompt.ToolResultPart): any => part.isFailure ? part.result : (part.result as any).output
 
 const getImageDetail = (part: Prompt.FilePart): ImageDetail => part.options.openai?.imageDetail ?? "auto"
 
 const getPromptCacheBreakpoint = (
-  input: Prompt.SystemMessage | Prompt.TextPart
+  input: Prompt.SystemMessage | Prompt.TextPart | Prompt.FilePart
 ) => {
   const promptCacheBreakpoint = input.options.openai?.promptCacheBreakpoint
   return Predicate.isNotNullish(promptCacheBreakpoint) ? { prompt_cache_breakpoint: promptCacheBreakpoint } : undefined
@@ -3165,16 +3214,27 @@ const tryJsonSchema = <S extends Schema.Constraint>(schema: S, method: string) =
     catch: (error) => unsupportedSchemaError(error, method)
   })
 
-const tryToolJsonSchema = <T extends Tool.Any>(tool: T, method: string) =>
+const toolParametersError = (tool: Tool.Any, error: unknown, method: string): AiError.AiError =>
+  unsupportedSchemaError(
+    `Tool "${tool.name}" parameters: ${error instanceof Error ? error.message : String(error)}. ` +
+      "For a tool without parameters, omit `parameters` or use `Tool.EmptyParams`",
+    method
+  )
+
+const getToolStrictMode = (tool: Tool.Any, config: typeof Config.Service): boolean =>
+  Tool.getStrictMode(tool) ?? config.strictJsonSchema ?? true
+
+const tryToolJsonSchema = <T extends Tool.Any>(tool: T, strict: boolean, method: string) =>
   Effect.try({
-    try: () => Tool.getJsonSchema(tool, { transformer: toCodecOpenAI }),
-    catch: (error) => unsupportedSchemaError(error, method)
+    try: () =>
+      Tool.getJsonSchema(tool, { transformer: strict ? toCodecOpenAI : LanguageModel.defaultCodecTransformer }),
+    catch: (error) => toolParametersError(tool, error, method)
   })
 
 const prepareResponseFormat = Effect.fnUntraced(function*({ config, options }: {
   readonly config: typeof Config.Service
   readonly options: LanguageModel.ProviderOptions
-}): Effect.fn.Return<typeof OpenAiSchema.TextResponseFormatConfiguration.Encoded, AiError.AiError> {
+}): Effect.fn.Return<typeof OpenAiSchema.TextResponseFormatConfiguration.Encoded | undefined, AiError.AiError> {
   if (options.responseFormat.type === "json") {
     const name = options.responseFormat.objectName
     const schema = options.responseFormat.schema
@@ -3187,7 +3247,7 @@ const prepareResponseFormat = Effect.fnUntraced(function*({ config, options }: {
       strict: config.strictJsonSchema ?? true
     }
   }
-  return { type: "text" }
+  return undefined
 })
 
 // Default new model names to reasoning without extending an allowlist.
@@ -3334,6 +3394,7 @@ const getUsageTokenDetail = (details: unknown, key: string): number | undefined 
   Predicate.hasProperty(details, key) && typeof details[key] === "number" ? details[key] : undefined
 
 const transformToolCallParams = Effect.fnUntraced(function*(
+  config: typeof Config.Service,
   options: LanguageModel.ProviderOptions,
   toolName: string,
   toolParams: unknown
@@ -3354,7 +3415,7 @@ const transformToolCallParams = Effect.fnUntraced(function*(
     })
   }
 
-  if (Tool.isDynamic(tool) && tool.jsonSchema !== undefined) {
+  if (!getToolStrictMode(tool, config) || (Tool.isDynamic(tool) && tool.jsonSchema !== undefined)) {
     return toolParams
   }
 
@@ -3365,7 +3426,10 @@ const transformToolCallParams = Effect.fnUntraced(function*(
     Schema.decodeEffect(codec)(toolParams) as Effect.Effect<unknown, Schema.SchemaError>
   ).pipe(
     Effect.flatMap((decoded) =>
-      Schema.encodeUnknownEffect(tool.parametersSchema)(decoded) as Effect.Effect<unknown, Schema.SchemaError>
+      Schema.encodeUnknownEffect(Schema.toCodecJson(tool.parametersSchema))(decoded) as Effect.Effect<
+        unknown,
+        Schema.SchemaError
+      >
     ),
     Effect.orElseSucceed(() => toolParams)
   )

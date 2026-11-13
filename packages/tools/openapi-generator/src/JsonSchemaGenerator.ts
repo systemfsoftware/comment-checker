@@ -19,8 +19,8 @@
  * @since 4.0.0
  */
 import * as Arr from "effect/Array"
-import * as JsonPointer from "effect/JsonPointer"
 import * as JsonSchema from "effect/JsonSchema"
+import * as Option from "effect/Option"
 import * as Rec from "effect/Record"
 import * as Schema from "effect/Schema"
 import * as SchemaRepresentation from "effect/SchemaRepresentation"
@@ -29,6 +29,13 @@ type Source = "openapi-3.0" | "openapi-3.1"
 interface GenerateOptions {
   readonly onEnter?: ((js: JsonSchema.JsonSchema) => JsonSchema.JsonSchema) | undefined
   readonly multipartSchemaRefs?: MultipartSchemaRefs | undefined
+  readonly includeSchemas?: ReadonlyArray<string> | undefined
+  /**
+   * Closes objects with declared properties when every contributing object schema omits `additionalProperties`.
+   *
+   * @stability experimental
+   */
+  readonly closeObjects?: boolean | undefined
 }
 
 interface HttpApiMultipartSchemaRefs {
@@ -117,8 +124,8 @@ function makeWithRepresentation() {
       }
     }
 
-    const codes = generated.codeDocument.codes.map((code, i) =>
-      renderSchemaTypeAndRuntime(generated.nameMap[i], code, typeOnly, options)
+    const codes = generated.nameMap.map((name, i) =>
+      renderSchemaTypeAndRuntime(name, generated.codeDocument.codes[i], typeOnly, options)
     )
 
     return renderImportArtifacts(generated.codeDocument, !typeOnly) +
@@ -169,8 +176,8 @@ function makeWithRepresentation() {
       recursives.push(renderSchemaTypeAndRuntime($ref, code, false, options))
     }
 
-    const codes = generated.codeDocument.codes.map((code, i) =>
-      renderSchemaTypeAndRuntime(generated.nameMap[i], code, false, options)
+    const codes = generated.nameMap.map((name, i) =>
+      renderSchemaTypeAndRuntime(name, generated.codeDocument.codes[i], false, options)
     )
 
     return renderImportArtifacts(generated.codeDocument, true) +
@@ -191,7 +198,7 @@ function makeWithRepresentation() {
     const nameMap: Array<string> = []
     const schemas: Array<JsonSchema.JsonSchema> = []
 
-    let definitions: JsonSchema.Definitions = Rec.map(
+    const definitions: JsonSchema.Definitions = Rec.map(
       components,
       (js) => fromSchemaOpenApi(source, js).schema
     )
@@ -200,12 +207,16 @@ function makeWithRepresentation() {
       nameMap.push(name)
       schemas.push(fromSchemaOpenApi(source, js).schema)
     }
+    // Unnamed roots, so included components are emitted as definitions without an alias
+    for (const name of options?.includeSchemas ?? []) {
+      if (!Object.hasOwn(components, name)) {
+        throw new Error(`Included schema ${name} is not a component`)
+      }
+      schemas.push(fromSchemaOpenApi(source, { $ref: `#/components/schemas/${name}` }).schema)
+    }
 
     if (!Arr.isArrayNonEmpty(schemas)) {
       return
-    }
-    if (options?.multipartSchemaRefs?.kind === "httpapi") {
-      definitions = omitSupersededMultipartDefinitions(definitions, schemas, options.multipartSchemaRefs)
     }
 
     const document = {
@@ -218,6 +229,7 @@ function makeWithRepresentation() {
     const preparedOutputs = new WeakSet<JsonSchema.JsonSchema>()
     const importerOptions: SchemaRepresentation.FromJsonSchemaOptions = {
       patterns: "apply",
+      closeObjects: options?.closeObjects,
       onEnter(js: JsonSchema.JsonSchema) {
         if (preparedOutputs.has(js)) return js
         const cached = preparedSchemas.get(js)
@@ -242,7 +254,8 @@ function makeWithRepresentation() {
       for (let i = 0; i < schemasWithExamples.length; i++) {
         const node = schemasWithExamples[i]
         const examples = node.examples as ReadonlyArray<unknown>
-        const validExamples = examples.filter(Schema.is(exampleSchemas[i]))
+        const decode = Schema.decodeUnknownOption(Schema.toType(exampleSchemas[i]), { onExcessProperty: "error" })
+        const validExamples = examples.filter((example) => Option.isSome(decode(example)))
         if (validExamples.length === examples.length) continue
         if (validExamples.length === 0) {
           delete node.examples
@@ -262,7 +275,12 @@ function makeWithRepresentation() {
     }
   }
 
-  return { addSchema, generate, generateHttpApi } as const
+  return {
+    addSchema,
+    generate,
+    generateHttpApi,
+    schemas: store as Readonly<Record<string, JsonSchema.JsonSchema>>
+  } as const
 }
 
 function fromSchemaOpenApi(source: Source, jsonSchema: JsonSchema.JsonSchema) {
@@ -331,64 +349,6 @@ function renderImportArtifacts(codeDocument: SchemaRepresentation.CodeDocument, 
     artifact._tag === "Import" ? [artifact.importDeclaration] : []
   )
   return imports.length === 0 ? "" : imports.join("\n") + "\n"
-}
-
-function omitSupersededMultipartDefinitions(
-  definitions: JsonSchema.Definitions,
-  schemas: ReadonlyArray<JsonSchema.JsonSchema>,
-  multipartSchemaRefs: HttpApiMultipartSchemaRefs
-): JsonSchema.Definitions {
-  const rootReferences = collectReferenceKeys(schemas)
-  const multipartReferences = new Set([multipartSchemaRefs.singleFile, multipartSchemaRefs.files])
-  const output: JsonSchema.Definitions = {}
-
-  for (const [key, schema] of Object.entries(definitions)) {
-    const superseded = !multipartReferences.has(key) && !rootReferences.has(key) &&
-      referencesAny(schema, multipartReferences)
-    if (!superseded) {
-      Object.defineProperty(output, key, {
-        value: schema,
-        enumerable: true,
-        configurable: true,
-        writable: true
-      })
-    }
-  }
-  return output
-}
-
-function collectReferenceKeys(input: unknown): Set<string> {
-  const references = new Set<string>()
-  visitReferences(input, ($ref) => {
-    const token = $ref.split("/").at(-1)
-    if (token !== undefined && token.length > 0) {
-      references.add(JsonPointer.unescapeToken(token))
-    }
-  })
-  return references
-}
-
-function referencesAny(input: unknown, keys: ReadonlySet<string>): boolean {
-  const references = collectReferenceKeys(input)
-  for (const key of references) {
-    if (keys.has(key)) return true
-  }
-  return false
-}
-
-function visitReferences(input: unknown, onReference: ($ref: string) => void): void {
-  if (Array.isArray(input)) {
-    for (const value of input) visitReferences(value, onReference)
-    return
-  }
-  if (typeof input !== "object" || input === null) return
-  for (const [key, value] of Object.entries(input)) {
-    if (key === "$ref" && typeof value === "string") {
-      onReference(value)
-    } else {
-      visitReferences(value, onReference)
-    }
-  }
 }
 
 const tokenPattern = /[A-Za-z_$][A-Za-z0-9_$]*/g

@@ -526,7 +526,11 @@ const makeSocket = Effect.gen(function*() {
       const httpClient = Predicate.isNotUndefined(config?.transformClient)
         ? config.transformClient(client.client)
         : client.client
-      return Effect.orDie(httpClient.preprocess(HttpClientRequest.post("/responses")))
+      return Effect.catchTag(
+        httpClient.preprocess(HttpClientRequest.post("/responses")),
+        "HttpClientError",
+        (error) => Errors.mapHttpClientError(error, "createResponseStream")
+      )
     }
   )
   const makeWebSocket = yield* Socket.WebSocketConstructor
@@ -542,11 +546,15 @@ const makeSocket = Effect.gen(function*() {
     current: Turn | undefined
   }
 
-  const queueRef: RcRef.RcRef<SocketConnection> = yield* RcRef.make({
+  // Reuse the connection request to avoid exchanging credentials on each turn.
+  let connectionRequest: HttpClientRequest.HttpClientRequest | undefined
+
+  const queueRef: RcRef.RcRef<SocketConnection, AiError.AiError> = yield* RcRef.make({
     idleTimeToLive: 60_000,
     acquire: Effect.gen(function*() {
       const scope = yield* Effect.scope
       const request = yield* makeRequest
+      connectionRequest = request
       const socket = yield* Socket.makeWebSocket(request.url.replace(/^http/, "ws")).pipe(
         Effect.provideService(Socket.WebSocketConstructor, (url) =>
           makeWebSocket(url, {
@@ -573,13 +581,8 @@ const makeSocket = Effect.gen(function*() {
                 method: "createResponseStream",
                 reason: new AiError.NetworkError({
                   reason: "TransportError",
-                  request: {
-                    method: "POST",
-                    url: request.url,
-                    urlParams: [],
-                    hash: undefined,
-                    headers: request.headers
-                  },
+                  method: request.method,
+                  url: request.url,
                   description: "Failed to send message over WebSocket"
                 })
               })
@@ -630,14 +633,7 @@ const makeSocket = Effect.gen(function*() {
                   : status,
                 metadata: error as any,
                 http: {
-                  body: json,
-                  request: {
-                    method: "POST",
-                    url: request.url,
-                    urlParams: [],
-                    hash: undefined,
-                    headers: request.headers
-                  }
+                  body: json
                 }
               })
             }))
@@ -670,13 +666,8 @@ const makeSocket = Effect.gen(function*() {
             method: "createResponseStream",
             reason: new AiError.NetworkError({
               reason: "TransportError",
-              request: {
-                method: "POST",
-                url: request.url,
-                urlParams: [],
-                hash: undefined,
-                headers: request.headers
-              },
+              method: request.method,
+              url: request.url,
               description: error.message
             })
           })),
@@ -693,12 +684,11 @@ const makeSocket = Effect.gen(function*() {
     })
   })
 
-  // Prime the websocket
-  yield* Effect.scoped(RcRef.get(queueRef))
+  // Prime the socket; let the first response stream report preparation failures.
+  yield* Effect.ignore(Effect.scoped(RcRef.get(queueRef)))
 
   // Websocket mode only allows one request at a time
   const semaphore = Semaphore.makeUnsafe(1)
-  const request = yield* makeRequest
 
   return OpenAiSocket.context({
     createResponseStream(options) {
@@ -727,10 +717,13 @@ const makeSocket = Effect.gen(function*() {
         return Stream.fromQueue(turn)
       }))
 
-      return Effect.succeed([
-        HttpClientResponse.fromWeb(request, new Response()),
-        stream
-      ])
+      return Effect.map(
+        Effect.suspend(() => connectionRequest === undefined ? makeRequest : Effect.succeed(connectionRequest)),
+        (request) => [
+          HttpClientResponse.fromWeb(request, new Response()),
+          stream
+        ]
+      )
     }
   }).pipe(
     Context.add(ResponseIdTracker.ResponseIdTracker, tracker)
@@ -773,11 +766,13 @@ const decodeEvent = Schema.decodeUnknownSync(Schema.fromJsonString(AllEvents))
  *
  * This only works with the following WebSocket constructor layers:
  *
- * - `NodeSocket.layerWebSocketConstructorWS`
+ * - `NodeSocket.layerWebSocketConstructor`
+ * - `NodeWS.layerWebSocketConstructor`
  * - `BunSocket.layerWebSocketConstructor`
  *
  * These constructor layers support the non-standard options needed to set the
- * Authorization header.
+ * Authorization header. The header is resolved each time a socket connects, and
+ * the socket keeps it until it closes.
  *
  * @see {@link layerWebSocketMode} for providing WebSocket mode through a layer
  * @see {@link OpenAiSocket} for direct access to the WebSocket-backed streaming service
@@ -812,11 +807,13 @@ export const withWebSocketMode = <A, E, R>(
  *
  * This only works with the following WebSocket constructor layers:
  *
- * - `NodeSocket.layerWebSocketConstructorWS`
+ * - `NodeSocket.layerWebSocketConstructor`
+ * - `NodeWS.layerWebSocketConstructor`
  * - `BunSocket.layerWebSocketConstructor`
  *
  * These constructor layers support the non-standard options needed to set the
- * Authorization header.
+ * Authorization header. The header is resolved each time a socket connects, and
+ * the socket keeps it until it closes.
  *
  * @see {@link withWebSocketMode} for enabling WebSocket mode around a single effect
  *
