@@ -6,7 +6,7 @@ problem_type: build_error
 
 ## Symptom
 
-SYS-1411: a PR check spent 70-90% of its job time on setup. In effect-microvm's commitlint job (run 43364358441,
+A PR check spent 70-90% of its job time on setup. In effect-microvm's commitlint job (run 43364358441,
 job 131685134087) nine `unpacking 'github:...'` lines ran one after another for about 90 s of a 134 s `nix develop` step.
 
 ## Cause
