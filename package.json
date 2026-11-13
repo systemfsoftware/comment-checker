@@ -15,7 +15,7 @@
     "@effect/tsgo": "latest",
     "@systemfsoftware/tsconfig": "^2.0.1",
     "tsdown": "latest",
-    "turbo": "^2.11.7",
+    "turbo": "^2.11.10",
     "typescript": "latest"
   }
 }
