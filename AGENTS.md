@@ -4,6 +4,13 @@ A high-quality, mutation-tested Rust implementation of a Claude Code `PostToolUs
 
 The JS launcher layer uses Effect v4. Never install, import, or pin `effect@3.*` in the JS side.
 
+## Routing
+
+| Doc                                 | Trigger                                                                                                                                         |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONSTITUTION.md`                   | architecture changes, rule authoring, or design disputes                                                                                        |
+| `repos/constitution/ENFORCEMENT.md` | building or changing an instrument that grades work (lint gates, stream rules, CI checks, thresholds, rubrics, advisors); situational read only |
+
 ## Directory map
 
 | Path | What it holds |
