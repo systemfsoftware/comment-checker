@@ -1,6 +1,6 @@
 import { PgConnection } from "@effect/sql-pg"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Fiber, Redacted } from "effect"
+import { Effect, Exit, Fiber, Option, Redacted, Scheduler, Scope, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { mkdtemp, rm } from "node:fs/promises"
 import * as Net from "node:net"
@@ -502,7 +502,7 @@ describe("PgConnection in-process server", () => {
       assert.match(names[0], /^effect_[0-9a-f]{16}_1$/)
     }))
 
-  it.effect("ends a custom stream after writing Terminate", () =>
+  it.live("ends and destroys a custom stream after writing Terminate", () =>
     Effect.gen(function*() {
       const writes: Array<Buffer> = []
       const socket: Duplex = new Duplex({
@@ -516,12 +516,53 @@ describe("PgConnection in-process server", () => {
         }
       })
 
+      yield* Effect.addFinalizer(() => Effect.sync(() => socket.destroy()))
+      const closed = new Promise<void>((resolve) => socket.once("close", resolve))
       yield* Effect.scoped(PgConnection.make({ username: "test", stream: () => socket }))
+      const close = yield* Effect.promise(() => closed).pipe(Effect.timeoutOption("500 millis"))
 
       assert.strictEqual(writes.at(-1)?.toString("hex"), "5800000004")
       assert.isTrue(socket.writableEnded)
-      assert.isFalse(socket.destroyed)
+      assert.isTrue(socket.destroyed)
+      assert.isTrue(Option.isSome(close))
     }))
+
+  it.live.each(["statement", "stream"] as const)(
+    "does not start a %s while its pin is being released",
+    (kind) =>
+      Effect.gen(function*() {
+        // Each budget makes the work first yield at a later step of its admission,
+        // so the pin release lands in every gap. Budgets below 3 make no progress.
+        for (let budget = 3; budget <= 40; budget++) {
+          yield* Effect.scoped(Effect.gen(function*() {
+            let writes = 0
+            // Answers startup and never answers a statement.
+            const socket: Duplex = new Duplex({
+              read() {},
+              write(_chunk: Buffer, _encoding, callback) {
+                if (++writes === 1) {
+                  queueMicrotask(() => socket.push(Buffer.concat([authenticationOk, backendKeyData, readyForQuery])))
+                }
+                callback()
+              }
+            })
+            const connection = yield* PgConnection.make({ username: "test", stream: () => socket })
+            const scope = yield* Scope.make()
+            const pinned = yield* Scope.provide(connection.pin, scope)
+            const work = kind === "statement" ? pinned.query("SELECT 1") : Stream.runDrain(pinned.stream("SELECT 1"))
+            const fiber = yield* Effect.forkChild(Effect.provideService(work, Scheduler.MaxOpsBeforeYield, budget), {
+              startImmediately: true
+            })
+            const closing = yield* Effect.forkDetach(Scope.close(scope, Exit.void))
+            const closed = yield* Fiber.await(closing).pipe(Effect.timeoutOption("2 seconds"))
+            if (Option.isNone(closed)) socket.destroy()
+            assert.isTrue(Option.isSome(closed), `pin release waited on a ${kind} at budget ${budget}`)
+            const exit = yield* Fiber.await(fiber).pipe(Effect.timeoutOption("2 seconds"))
+            assert.isTrue(Option.isSome(exit) && Exit.isFailure(exit.value), `${kind} did not end at budget ${budget}`)
+          }))
+        }
+      })
+  )
 
   describe("TLS servername", () => {
     const cases: ReadonlyArray<{
@@ -903,6 +944,32 @@ describe("PgConnection in-process server", () => {
       }
     })))
 
+  it.live("preserves a FATAL ErrorResponse sent before the server closes the connection", () =>
+    Effect.scoped(Effect.gen(function*() {
+      const { port } = yield* withTcpServer((socket) => {
+        consumeFrontend(socket, (tag) => {
+          if (tag === undefined) {
+            socket.write(Buffer.concat([authenticationOk, backendKeyData, readyForQuery]))
+          } else if (tag === "S") {
+            socket.end(errorResponse([
+              ["S", "FATAL"],
+              ["C", "25P04"],
+              ["M", "terminating connection due to transaction timeout"]
+            ]))
+          }
+        })
+      })
+      const connection = yield* PgConnection.make({ host: "127.0.0.1", port, username: "test" })
+
+      const error = yield* Effect.flip(connection.query("SELECT pg_sleep(1)"))
+
+      assert.strictEqual(error.reason._tag, "UnknownError")
+      assert.strictEqual(error.reason.message, "PgConnection: Query failed")
+      assert.instanceOf(error.reason.cause, Error)
+      assert.strictEqual(error.reason.cause.message, "terminating connection due to transaction timeout")
+      assert.strictEqual((error.reason.cause as { readonly code?: string }).code, "25P04")
+    })))
+
   it.live("sends Terminate when the connection scope closes", () =>
     Effect.scoped(Effect.gen(function*() {
       let signalTerminate!: (message: Buffer) => void
@@ -924,6 +991,59 @@ describe("PgConnection in-process server", () => {
 
       assert.strictEqual(message.toString("hex"), "5800000004")
     })))
+
+  it.live("destroys the socket after Terminate when the peer withholds FIN", () =>
+    Effect.gen(function*() {
+      let signalTerminate!: (message: Buffer) => void
+      const terminated = new Promise<Buffer>((resolve) => {
+        signalTerminate = resolve
+      })
+      const sockets: Array<Net.Socket> = []
+      const { port } = yield* withTcpServer((socket) => {
+        socket.allowHalfOpen = true
+        sockets.push(socket)
+        consumeFrontend(socket, (tag, message) => {
+          if (tag === undefined) {
+            socket.write(Buffer.concat([authenticationOk, backendKeyData, readyForQuery]))
+          } else if (tag === "X") {
+            signalTerminate(message)
+          }
+        })
+      })
+      // Destroy both ends even when the assertion fails, before closing the server.
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          for (const socket of sockets) socket.destroy()
+        })
+      )
+      const original = Net.connect
+      let client!: Net.Socket
+      let closed!: Promise<void>
+      yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          vi.spyOn(Net, "connect").mockImplementation(
+            ((options: Net.NetConnectOpts) => {
+              const socket = original(options)
+              if ("port" in options && options.port === port) {
+                client = socket
+                sockets.push(socket)
+                closed = new Promise<void>((resolve) => socket.once("close", resolve))
+              }
+              return socket
+            }) as typeof Net.connect
+          )
+        ),
+        (spy) => Effect.sync(() => spy.mockRestore())
+      )
+
+      yield* Effect.scoped(PgConnection.make({ host: "127.0.0.1", port, username: "test" }))
+      const message = yield* Effect.promise(() => terminated).pipe(Effect.timeout("2 seconds"))
+      assert.strictEqual(message.toString("hex"), "5800000004")
+      // Stay below the backstop: a successful flush must retire the socket promptly.
+      const close = yield* Effect.promise(() => closed).pipe(Effect.timeoutOption("500 millis"))
+      assert.isTrue(Option.isSome(close), "client socket did not close after flushing Terminate")
+      assert.isTrue(client.destroyed)
+    }), { concurrent: false })
 
   it.live("authenticates with a cleartext password request", () =>
     Effect.scoped(Effect.gen(function*() {

@@ -49,9 +49,18 @@ export interface Parser<A = Uint8Array | null> {
   readField: FieldReader<A> | undefined
 
   /**
+   * Receives an error other than `ParseError` thrown by `readField`. The
+   * `DataRow` is fully consumed, so the parser drops it and carries on with
+   * the next message. Without a handler, the default, such errors are
+   * terminal, like parse errors.
+   */
+  onFieldError: ((error: unknown) => void) | undefined
+
+  /**
    * Decodes a chunk and returns every complete message. A partial message is
-   * retained for the next call. Parse and field-reader errors are terminal and
-   * discard messages decoded earlier in the same call.
+   * retained for the next call. Parse errors are terminal and discard
+   * messages decoded earlier in the same call, as are field-reader errors
+   * when no `onFieldError` handler is set.
    *
    * **Details**
    *
@@ -129,6 +138,7 @@ export const makeParser = <A = Uint8Array | null>(options?: {
 
   const parser: Parser<A> = {
     readField: options?.readField,
+    onFieldError: undefined,
     push(chunk) {
       const messages: Array<BackendMessage<A>> = []
       parser.pushEach(chunk, (message) => {
@@ -160,7 +170,17 @@ export const makeParser = <A = Uint8Array | null>(options?: {
           start = limit
           if (type === BackendType.DataRow) {
             // `buffer` always starts at byte 0 of `store`, so offsets index both.
-            onMessage(decodeDataRow<A>(buffer, store, 0, body, limit, parser.readField))
+            let row: DataRow<A>
+            try {
+              row = decodeDataRow<A>(buffer, store, 0, body, limit, parser.readField)
+            } catch (error) {
+              // `start` is already past the row, so the stream stays framed.
+              const onFieldError = parser.onFieldError
+              if (onFieldError === undefined || error instanceof ParseError) throw error
+              onFieldError(error)
+              continue
+            }
+            onMessage(row)
           } else {
             reader.reset(buffer, body, limit)
             const message = decodeBackend(type, reader)
@@ -702,8 +722,8 @@ const empty = (type: number): Uint8Array => {
 
 const targetByte = (target: DescribeTarget): number => target === "statement" ? 0x53 : 0x50
 
-const requireInt16Count = (count: number, name: string): number => {
-  if (count > 0x7fff) throw new EncodeError({ message: `${name} count exceeds 32767: ${count}` })
+const requireUint16Count = (count: number, name: string): number => {
+  if (count > 0xffff) throw new EncodeError({ message: `${name} count exceeds 65535: ${count}` })
   return count
 }
 
@@ -718,7 +738,7 @@ const encodeResult = <A>(evaluate: () => A): Result.Result<A, EncodeError> => {
 
 /**
  * Encodes a `Parse` message, returning `EncodeError` when its parameter count
- * is outside the signed int16 wire range.
+ * is outside the unsigned int16 wire range.
  *
  * @category encoding
  * @since 4.0.0
@@ -728,7 +748,7 @@ const encodeParseUnsafe = (options: Omit<Parse, "_tag">): Uint8Array => {
   writer.cString(options.name)
   writer.cString(options.query)
   const parameterTypes = options.parameterTypes
-  const count = requireInt16Count(parameterTypes.length, "Parse parameter type")
+  const count = requireUint16Count(parameterTypes.length, "Parse parameter type")
   writer.reserve(2 + count * 4)
   const bytes = writer.bytes
   let offset = writer.offset
@@ -760,7 +780,7 @@ export const encodeParse = (options: Omit<Parse, "_tag">): Result.Result<Uint8Ar
 /**
  * Encodes a `Bind` message using the binary format code for parameters and
  * results, returning `EncodeError` when its parameter count is outside the
- * signed int16 wire range.
+ * unsigned int16 wire range.
  *
  * @category encoding
  * @since 4.0.0
@@ -770,7 +790,7 @@ const encodeBindUnsafe = (options: Omit<Bind, "_tag">): Uint8Array => {
   writer.cString(options.portal)
   writer.cString(options.statement)
   const parameters = options.parameters
-  const count = requireInt16Count(parameters.length, "Bind parameter")
+  const count = requireUint16Count(parameters.length, "Bind parameter")
   // Sizing the rest of the frame up front turns every remaining write into a
   // plain store: one bounds check for the message instead of one per field.
   let size = 10 + count * 4
@@ -899,7 +919,7 @@ export const makeBindEncoder = <A, E = never>(
     writer.cString(options.portal)
     writer.cString(options.statement)
     const parameters = options.parameters
-    const count = requireInt16Count(parameters.length, "Bind parameter")
+    const count = requireUint16Count(parameters.length, "Bind parameter")
     let textCount = 0
     if (textFormat !== undefined) {
       for (let index = 0; index < count; index++) {
