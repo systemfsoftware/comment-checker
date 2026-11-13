@@ -2,11 +2,11 @@
 [package]
 name = "claude-code-comment-checker"
 version.workspace = true
-edition = "2024"
-rust-version = "1.90"
-license = "Apache-2.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
 description = "Comment checker hook for Claude Code — flags genuinely unnecessary comments, spares justified ones"
-repository = "https://github.com/systemfsoftware/claude-code-comment-checker"
+repository.workspace = true
 keywords = ["comments","tree-sitter","claude-code","hook"]
 categories = ["command-line-utilities","development-tools"]
 
