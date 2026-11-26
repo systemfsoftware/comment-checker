@@ -40,7 +40,7 @@ Verdicts that depend on surrounding code never convict a fragment. On `Edit` and
 
 ## Install
 
-The package is not published to npm. Take the binary from this repository's Nix flake, which is built at each release tag. The flake provides `packages.default`, a wrapper that runs the binary under `bubblewrap` with no network access.
+The package is not published to npm. Take the binary from this repository's Nix flake, which is built at each release tag. The flake provides `packages.default` and `packages.comment-checker`, wrappers that run the binary under `bubblewrap` on Linux and `sandbox-exec` on macOS, with no network access and no host environment. `packages.comment-checker-unwrapped` is the raw binary for a host that already provides its own sandbox.
 
 ```bash
 nix profile install github:systemfsoftware/comment-checker \
@@ -69,7 +69,7 @@ In a flake of your own, add the input and reuse its package:
 }
 ```
 
-Supported systems are `x86_64-linux` and `aarch64-linux`.
+Supported systems are `x86_64-linux`, `aarch64-linux` and `aarch64-darwin`. On Linux, an unprivileged `bubblewrap` needs unprivileged user namespaces: Ubuntu 24.04 and later ship `kernel.apparmor_restrict_unprivileged_userns=1`, which makes the wrapper fail at loopback setup (`bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`); the wrapper works once that sysctl is `0`.
 
 ## Configure Claude Code
 
@@ -99,6 +99,26 @@ Claude Code treats exit `2` as a block and passes stderr back to the model. Any 
 
 ```bash
 comment-checker --strip < payload.json
+```
+
+## Run in CI
+
+On a GitHub-hosted Ubuntu runner, keep the sandbox and let it create an unprivileged user namespace:
+
+```yaml
+- name: Permit unprivileged user namespaces for bubblewrap
+  run: |
+    if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+      sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+    fi
+```
+
+Ubuntu 24.04 and later set that sysctl to `1`. Without the step, the sandboxed build fails with `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`.
+
+Where `sudo` is not available, use `comment-checker-unwrapped` from the flake instead: the runner VM is already the outer boundary, so the wrapper would only stack a second sandbox the runner cannot create.
+
+```yaml
+- run: comment-checker < payload.json
 ```
 
 ## Exit codes
