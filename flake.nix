@@ -96,8 +96,9 @@
       # the check itself.
       cwdGuard = ''
         safe_cwd() {
+          home_real="$(cd "$HOME" 2>/dev/null && pwd -P)"
           case "$1" in
-            "" | / | "$HOME" | "''${HOME%/}") return 1 ;;
+            "" | / | "$HOME" | "''${HOME%/}" | "$home_real" | "''${home_real%/}") return 1 ;;
             *[!A-Za-z0-9_/.-]*)
               echo "comment-checker: no read access for a working directory outside [A-Za-z0-9_/.-]: $1" >&2
               return 1

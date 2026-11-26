@@ -46,7 +46,8 @@ expect_line "$control" 'SECRET=[leak]'
 expect_line "$control" CWD_WRITABLE
 expect_line "$control" ETC_READ_OK
 expect_line "$control" USR_READ_OK
-rm -f .sandbox-probe-write
+expect_line "$control" TMPDIR_WRITABLE
+rm -f .sandbox-probe-write "${TMPDIR:-/tmp}/.sandbox-probe-write"
 
 boxed="$(SANDBOX_PROBE_SECRET=leak "$probe_boxed" "$canary" "$port")"
 expect_line "$boxed" NET_DENIED

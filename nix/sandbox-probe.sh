@@ -23,6 +23,12 @@ else
   echo CWD_READONLY
 fi
 
+if { printf x > "${TMPDIR:-/tmp}/.sandbox-probe-write"; } 2>/dev/null; then
+  echo TMPDIR_WRITABLE
+else
+  echo TMPDIR_READONLY
+fi
+
 if { exec 5</etc/passwd; } 2>/dev/null; then
   echo ETC_READ_OK
   exec 5<&-
