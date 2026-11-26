@@ -101,6 +101,26 @@ Claude Code treats exit `2` as a block and passes stderr back to the model. Any 
 comment-checker --strip < payload.json
 ```
 
+## Run in CI
+
+On a GitHub-hosted Ubuntu runner, keep the sandbox and let it create an unprivileged user namespace:
+
+```yaml
+- name: Permit unprivileged user namespaces for bubblewrap
+  run: |
+    if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+      sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+    fi
+```
+
+Ubuntu 24.04 and later set that sysctl to `1`. Without the step, the sandboxed build fails with `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`.
+
+Where `sudo` is not available, use `comment-checker-unwrapped` from the flake instead: the runner VM is already the outer boundary, so the wrapper would only stack a second sandbox the runner cannot create.
+
+```yaml
+- run: comment-checker < payload.json
+```
+
 ## Exit codes
 
 | Code | Meaning | Stream |
